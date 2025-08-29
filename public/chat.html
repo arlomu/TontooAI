@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Tontoo AI | Chat</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="main-layout">
+        <div class="sidebar" id="chatSidebar">
+            <div class="chat-sidebar-header">
+                <img src="/icon.png" alt="Beschreibung des Icons" width="52" height="52">
+                <button id="newChatBtn" title="Neuer Chat"><i class="fas fa-plus"></i></button>
+                <p id="toggleSidebarBtn" title="Sidebar umschalten"></p>
+            </div>
+            <div class="chat-list" id="chatList">
+                <!-- Chat-Liste wird hier dynamisch geladen -->
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="chat-main">
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Nachrichten werden hier dynamisch geladen -->
+                </div>
+                <div class="chat-input-area">
+                    <textarea id="messageInput" placeholder="Nachricht eingeben..." rows="1"></textarea>
+                    <button id="sendMessageBtn"><i class="fas fa-paper-plane"></i></button>
+                    <select id="modelSelector" class="model-selector"></select>
+                </div>
+            </div>
+
+            <div class="user-info-footer" id="userInfoFooter">
+                <i class="fas fa-user icon"></i>
+                <span id="userTokensSummary"></span>
+                <div class="user-info-popup" id="userInfoPopup">
+                    <p>⚡ genutzt: <span id="popupUsedTokens"></span></p>
+                    <p>⚡ Max: <span id="popupMaxTokens"></span></p>
+                    <button onclick="window.location.href='/settings.html'"><i class="fas fa-cog"></i> Einstellungen</button>
+                    <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Abmelden</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="popupContainer"></div>
+
+    <script>
+        // Globale Funktionen, die im HTML onclick verwendet werden
+        window.copyCode = function(button) {
+            const codeElement = button.closest('.code-block').querySelector('code');
+            const textToCopy = codeElement.textContent;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                button.innerHTML = '<i class="fas fa-check"></i>';
+                setTimeout(() => { button.innerHTML = '<i class="fas fa-copy"></i>'; }, 2000);
+            }).catch(err => {
+                console.error('Fehler beim Kopieren des Codes:', err);
+                showPopup('Fehler beim Kopieren des Codes.', 'error');
+            });
+        };
+
+        // Hilfsfunktion für authentifizierte Anfragen
+        async function authenticatedFetch(url, options = {}) {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                ...options.headers
+            };
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401 || response.status === 403) {
+                localStorage.removeItem('authToken');
+                window.location.href = '/login.html';
+                throw new Error('Nicht authentifiziert oder nicht autorisiert.');
+            }
+            return response;
+        }
+
+        const popupContainer = document.getElementById('popupContainer');
+        function showPopup(message, type = 'error') {
+            const popup = document.createElement('div');
+            popup.classList.add('popup', type);
+            popup.textContent = message;
+            popupContainer.appendChild(popup);
+            setTimeout(() => popup.remove(), 5000);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatSidebar = document.getElementById('chatSidebar');
+            const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+            const newChatBtn = document.getElementById('newChatBtn');
+            const chatList = document.getElementById('chatList');
+            const chatMessages = document.getElementById('chatMessages');
+            const messageInput = document.getElementById('messageInput');
+            const sendMessageBtn = document.getElementById('sendMessageBtn');
+            const modelSelector = document.getElementById('modelSelector');
+            const logoutBtn = document.getElementById('logoutBtn');
+
+            let currentChatId = null;
+            let isGeneratingResponse = false;
+            let abortController = new AbortController();
+            let currentMessageId = null;
+
+            // --- Allgemeine Initialisierung ---
+            (async () => {
+                try {
+                    const response = await fetch('/api/general-config');
+                    const config = await response.json();
+                    document.getElementById('pageTitle').textContent = config['html-titel'].replace('%name', 'Chat');
+                } catch (error) {
+                    console.error('Fehler beim Laden der allgemeinen Konfiguration:', error);
+                }
+            })();
+            
+            // --- Authentifizierung und User-Info ---
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            async function loadUserInfo() {
+                try {
+                    const response = await authenticatedFetch('/api/user/me');
+                    if (!response.ok) throw new Error('Benutzerdaten konnten nicht geladen werden.');
+                    const userData = await response.json();
+                    const usedTokens = userData['used-tokens'] || 0;
+                    const maxTokens = userData['max-tokens'] === '--' ? '∞' : userData['max-tokens'];
+
+                    document.getElementById('userTokensSummary').textContent = `${usedTokens} / ${maxTokens} ⚡`;
+                    document.getElementById('popupUsedTokens').textContent = usedTokens;
+                    document.getElementById('popupMaxTokens').textContent = maxTokens;
+
+                    if (userData['max-tokens'] !== '--' && usedTokens >= parseInt(userData['max-tokens'])) {
+                        messageInput.disabled = true;
+                        sendMessageBtn.disabled = true;
+                        messageInput.placeholder = 'Tägliches Token-Limit erreicht.';
+                        showPopup('Ihr tägliches Token-Limit ist erreicht.', 'error');
+                    } else {
+                        messageInput.disabled = false;
+                        sendMessageBtn.disabled = false;
+                        messageInput.placeholder = 'Nachricht eingeben...';
+                    }
+                } catch (error) {
+                    console.error('Fehler beim Laden der Benutzerinfo:', error);
+                }
+            }
+
+            function logout() {
+                authenticatedFetch('/api/logout', { method: 'POST' })
+                    .then(() => {
+                        localStorage.removeItem('authToken');
+                        window.location.href = '/login.html';
+                    })
+                    .catch(error => {
+                        console.error('Logout fehlgeschlagen:', error);
+                        showPopup('Logout fehlgeschlagen.', 'error');
+                    });
+            }
+            logoutBtn.addEventListener('click', logout);
+            
+            const userInfoFooter = document.getElementById('userInfoFooter');
+            const userInfoPopup = document.getElementById('userInfoPopup');
+            userInfoFooter.addEventListener('click', (event) => {
+                if (!userInfoPopup.contains(event.target)) userInfoPopup.classList.toggle('active');
+            });
+            document.addEventListener('click', (event) => {
+                if (!userInfoFooter.contains(event.target)) userInfoPopup.classList.remove('active');
+            });
+
+            // --- Chat Sidebar ---
+            toggleSidebarBtn.addEventListener('click', () => {
+                chatSidebar.classList.toggle('collapsed');
+            });
+
+            newChatBtn.addEventListener('click', () => {
+                if (isGeneratingResponse) {
+                    stopGeneration();
+                    return;
+                }
+                currentChatId = null;
+                chatMessages.innerHTML = '';
+                document.querySelectorAll('.chat-list-item').forEach(item => item.classList.remove('active'));
+                messageInput.focus();
+            });
+
+            async function loadChatList() {
+                try {
+                    const response = await authenticatedFetch('/api/chats');
+                    if (!response.ok) throw new Error('Chat-Liste konnte nicht geladen werden.');
+                    const chats = await response.json();
+                    chatList.innerHTML = '';
+                    const sortedChats = chats.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    sortedChats.forEach(chat => {
+                        const chatItem = document.createElement('div');
+                        chatItem.classList.add('chat-list-item');
+                        chatItem.dataset.chatId = chat.id;
+                        if (currentChatId === chat.id) chatItem.classList.add('active');
+                        chatItem.innerHTML = `
+                            <span class="chat-list-item-title">${chat.title}</span>
+                            <div class="chat-list-item-actions">
+                                <button class="rename-chat-btn" data-chat-id="${chat.id}" title="Umbenennen"><i class="fas fa-edit"></i></button>
+                                <button class="delete-chat-btn danger" data-chat-id="${chat.id}" title="Löschen"><i class="fas fa-trash"></i></button>
+                            </div>`;
+                        chatList.appendChild(chatItem);
+                    });
+                } catch (error) {
+                    console.error('Fehler beim Laden der Chat-Liste:', error);
+                }
+            }
+
+            chatList.addEventListener('click', (e) => {
+                const target = e.target;
+                const chatItem = target.closest('.chat-list-item');
+                if (!chatItem) return;
+
+                const chatId = chatItem.dataset.chatId;
+                if (target.closest('.rename-chat-btn')) {
+                    renameChat(chatId);
+                } else if (target.closest('.delete-chat-btn')) {
+                    deleteChat(chatId);
+                } else {
+                    selectChat(chatId);
+                }
+            });
+
+            async function selectChat(chatId) {
+                if (isGeneratingResponse) {
+                    stopGeneration();
+                    return;
+                }
+                currentChatId = chatId;
+                document.querySelectorAll('.chat-list-item').forEach(item => item.classList.remove('active'));
+                document.querySelector(`.chat-list-item[data-chat-id="${chatId}"]`)?.classList.add('active');
+                try {
+                    const response = await authenticatedFetch(`/api/chats/${chatId}`);
+                    if (!response.ok) throw new Error('Chat-Verlauf konnte nicht geladen werden.');
+                    const chatData = await response.json();
+                    renderChatMessages(chatData.messages);
+                } catch (error) {
+                    console.error('Fehler beim Laden des Chat-Verlaufs:', error);
+                    showPopup('Fehler beim Laden des Chat-Verlaufs.', 'error');
+                }
+            }
+
+            async function renameChat(chatId) {
+                const newTitle = prompt('Neuen Chat-Namen eingeben:');
+                if (newTitle && newTitle.trim()) {
+                    try {
+                        await authenticatedFetch(`/api/chats/${chatId}/rename`, {
+                            method: 'POST',
+                            body: JSON.stringify({ title: newTitle.trim() })
+                        });
+                        loadChatList();
+                    } catch (error) {
+                        showPopup('Fehler beim Umbenennen.', 'error');
+                    }
+                }
+            }
+
+            async function deleteChat(chatId) {
+                if (confirm('Sind Sie sicher, dass Sie diesen Chat löschen möchten?')) {
+                    try {
+                        await authenticatedFetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+                        if (currentChatId === chatId) {
+                            currentChatId = null;
+                            chatMessages.innerHTML = '';
+                        }
+                        loadChatList();
+                    } catch (error) {
+                        showPopup('Fehler beim Löschen.', 'error');
+                    }
+                }
+            }
+            
+            // --- Modell-Lader ---
+            async function loadModels() {
+                try {
+                    const response = await authenticatedFetch('/api/models');
+                    if(!response.ok) throw new Error('Modelle konnten nicht geladen werden.');
+                    const models = await response.json();
+                    modelSelector.innerHTML = '';
+                    if (Object.keys(models).length === 0) {
+                         modelSelector.innerHTML = '<option value="">Keine Modelle verfügbar</option>';
+                         sendMessageBtn.disabled = true;
+                         messageInput.disabled = true;
+                         messageInput.placeholder = "Keine Modelle konfiguriert.";
+                    } else {
+                        for (const modelId in models) {
+                            const option = document.createElement('option');
+                            option.value = modelId;
+                            option.textContent = models[modelId];
+                            modelSelector.appendChild(option);
+                        }
+                    }
+                } catch(error) {
+                    console.error("Fehler beim Laden der Modelle:", error);
+                    showPopup("Fehler beim Laden der Modelle.", "error");
+                }
+            }
+
+            // --- Stop Generation Funktion ---
+            async function stopGeneration() {
+                if (!isGeneratingResponse) return;
+                
+                try {
+                    // Sende Stop-Request an den Server
+                    const response = await authenticatedFetch('/api/stop', {
+                        method: 'POST',
+                        body: JSON.stringify({ messageId: currentMessageId })
+                    });
+                    
+                    if (response.ok) {
+                        abortController.abort();
+                    }
+                } catch (error) {
+                    console.error('Fehler beim Stoppen der Generation:', error);
+                    showPopup('Fehler beim Stoppen.', 'error');
+                }
+            }
+
+            // --- Chat-Nachrichten-Logik ---
+            function escapeHtml(text) {
+                return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            }
+
+            function formatMessageContent(content) {
+                // Temporäre Markierung für Code-Blöcke, um sie vor der Verarbeitung zu schützen
+                const codeBlockPlaceholders = [];
+                content = content.replace(/```([\s\S]*?)```/g, (match, codeContent) => {
+                    const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
+                    codeBlockPlaceholders.push({ 
+                        type: 'block', 
+                        content: codeContent.trim(),
+                        placeholder
+                    });
+                    return placeholder;
+                });
+
+                // Temporäre Markierung für Inline-Code
+                const inlineCodePlaceholders = [];
+                content = content.replace(/`([^`]+)`/g, (match, codeContent) => {
+                    const placeholder = `___INLINE_CODE_${inlineCodePlaceholders.length}___`;
+                    inlineCodePlaceholders.push({
+                        type: 'inline',
+                        content: codeContent,
+                        placeholder
+                    });
+                    return placeholder;
+                });
+
+                // HTML-Escaping für den restlichen Text
+                let formattedContent = escapeHtml(content);
+                
+                // Fett-Text verarbeiten
+                formattedContent = formattedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                
+                // Kursiv-Text verarbeiten
+                formattedContent = formattedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                
+                // Zeilenumbrüche
+                formattedContent = formattedContent.replace(/\n/g, '<br>');
+                
+                // Code-Block-Platzhalter ersetzen
+                codeBlockPlaceholders.forEach(item => {
+                    const language = item.content.split('\n')[0].match(/^(\w+)/);
+                    const lang = language ? language[1] : 'text';
+                    const code = language ? item.content.substring(language[0].length).trim() : item.content;
+                    
+                    formattedContent = formattedContent.replace(
+                        item.placeholder, 
+                        `<div class="code-block"><div class="code-header"><span>${lang}</span><button onclick="copyCode(this)"><i class="fas fa-copy"></i></button></div><pre><code class="language-${lang}">${escapeHtml(code)}</code></pre></div>`
+                    );
+                });
+                
+                // Inline-Code-Platzhalter ersetzen
+                inlineCodePlaceholders.forEach(item => {
+                    formattedContent = formattedContent.replace(
+                        item.placeholder,
+                        `<code class="inline-code">${escapeHtml(item.content)}</code>`
+                    );
+                });
+                
+                return formattedContent;
+            }
+
+            function addMessageToChat(message) {
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('chat-message', message.sender);
+                messageElement.dataset.messageId = message.id;
+
+                const iconHtml = message.sender === 'user' ? 'DU' : '<img src="icon.png" alt="AI Icon" width="32" height="32">';
+                // Info-Container wird nur für die endgültige AI-Nachricht hinzugefügt
+                const infoHtml = message.sender === 'ai' && message.tokens !== undefined
+                    ? `<div class="chat-message-info">⚡ ${message.tokens} ⌛ ${message.time}s</div>`
+                    : '';
+
+                messageElement.innerHTML = `
+                    <div class="icon">${iconHtml}</div>
+                    <div class="chat-bubble-container">
+                        <div class="chat-bubble">${formatMessageContent(message.content)}</div>
+                        ${infoHtml}
+                    </div>`;
+                
+                chatMessages.appendChild(messageElement);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function updateLastAiMessage(chunk, isDone = false, stats = {}) {
+                let lastMessageElement = chatMessages.querySelector('.chat-message.ai:last-child');
+                
+                // Falls noch kein AI-Nachrichten-Element existiert, erstelle es
+                if (!lastMessageElement) {
+                     addMessageToChat({ id: `msg_${Date.now()}_ai`, sender: 'ai', content: '' });
+                     lastMessageElement = chatMessages.querySelector('.chat-message.ai:last-child');
+                }
+                
+                const bubble = lastMessageElement.querySelector('.chat-bubble');
+                const currentContent = bubble.dataset.rawContent || '';
+                const newContent = currentContent + chunk;
+                bubble.dataset.rawContent = newContent;
+                
+                // Nur den neuen Token hinzufügen (statt den gesamten Inhalt neu zu rendern)
+                bubble.innerHTML = formatMessageContent(newContent);
+
+                if (isDone) {
+                    // Füge den Info-Container nur hinzu, wenn die Nachricht abgeschlossen ist
+                    const infoContainer = document.createElement('div');
+                    infoContainer.classList.add('chat-message-info');
+                    infoContainer.innerHTML = `⚡ ${stats.tokens} ⌛ ${stats.time}s`;
+                    lastMessageElement.querySelector('.chat-bubble-container').appendChild(infoContainer);
+                }
+                
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function renderChatMessages(messages) {
+                chatMessages.innerHTML = '';
+                messages.forEach(msg => addMessageToChat(msg));
+            }
+
+            async function sendMessage() {
+                const content = messageInput.value.trim();
+                if (!content || isGeneratingResponse) return;
+
+                isGeneratingResponse = true;
+                currentMessageId = `msg_${Date.now()}_ai`;
+                sendMessageBtn.innerHTML = '<i class="fas fa-stop"></i>';
+                messageInput.value = '';
+                messageInput.disabled = false;
+
+                addMessageToChat({ 
+                    id: `msg_${Date.now()}_user`, 
+                    sender: 'user', 
+                    content 
+                });
+
+                try {
+                    abortController = new AbortController();
+                    const response = await authenticatedFetch('/api/chat/send', {
+                        method: 'POST',
+                        headers: { 'X-Chat-ID': currentChatId || '' },
+                        body: JSON.stringify({ message: content, model: modelSelector.value }),
+                        signal: abortController.signal
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Fehler beim Senden der Nachricht.');
+                    }
+                    
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let aiResponseContent = '';
+
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        
+                        const chunk = decoder.decode(value, { stream: true });
+                        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+                        for (const line of lines) {
+                            const data = JSON.parse(line);
+                            if (data.type === 'token') {
+                                aiResponseContent += data.token;
+                                updateLastAiMessage(data.token);
+                            } else if (data.type === 'end') {
+                                updateLastAiMessage('', true, { tokens: data.tokens, time: data.time });
+                                if (data.isNewChat) {
+                                    currentChatId = data.chatId;
+                                }
+                                loadChatList();
+                                loadUserInfo();
+                                break;
+                            } else if (data.type === 'error') {
+                                throw new Error(data.message);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('Fehler bei der KI-Antwort:', error);
+                        updateLastAiMessage(`\n\n**Fehler:** ${error.message}`);
+                    }
+                } finally {
+                    isGeneratingResponse = false;
+                    currentMessageId = null;
+                    sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                    messageInput.disabled = false;
+                    messageInput.focus();
+                }
+            }
+
+            sendMessageBtn.addEventListener('click', () => {
+                if (isGeneratingResponse) {
+                    stopGeneration();
+                } else {
+                    sendMessage();
+                }
+            });
+
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (isGeneratingResponse) {
+                        stopGeneration();
+                    } else {
+                        sendMessage();
+                    }
+                }
+            });
+
+            // --- Initialisierung ---
+            loadUserInfo();
+            loadChatList();
+            loadModels();
+        });
+    </script>
+</body>
+</html>

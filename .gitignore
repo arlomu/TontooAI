@@ -1,0 +1,6 @@
+node_modules/*
+data/attempts.json
+data/chats.json
+data/stats.json
+data/users.json
+ssl/*

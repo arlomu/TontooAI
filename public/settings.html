@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Tontoo AI | Einstellungen</title>
+    <link rel="stylesheet" href="/style.css">
+    <!-- FontAwesome für Icons, wenn verwendet -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="main-layout">
+        <div class="content-area">
+            <div class="admin-content">
+                <button onclick="window.history.back()" style="margin-bottom: 20px;"><i class="fas fa-arrow-left"></i> Zurück</button>
+                <h2>Einstellungen</h2>
+
+                <div class="settings-section">
+                    <h3>Persönliche Informationen</h3>
+                    <form id="personalInfoForm">
+                        <div class="form-group">
+                            <label for="firstName">Vorname</label>
+                            <input type="text" id="firstName" name="firstName">
+                        </div>
+                        <div class="form-group">
+                            <label for="location">Standort</label>
+                            <input type="text" id="location" name="location">
+                        </div>
+                        <div class="form-group">
+                            <label for="personalPrompt">Persönlicher KI-Prompt</label>
+                            <textarea id="personalPrompt" name="personalPrompt" rows="5"></textarea>
+                        </div>
+                        <button type="submit" style="float: right;">Speichern</button>
+                        <div style="clear: both;"></div>
+                    </form>
+                </div>
+
+                <div class="settings-section" style="margin-top: 40px;">
+                    <h3>Passwort ändern</h3>
+                    <form id="passwordChangeForm">
+                        <div class="form-group">
+                            <label for="currentPassword">Aktuelles Passwort</label>
+                            <input type="password" id="currentPassword" name="currentPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newPassword">Neues Passwort</label>
+                            <input type="password" id="newPassword" name="newPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmNewPassword">Neues Passwort bestätigen</label>
+                            <input type="password" id="confirmNewPassword" name="confirmNewPassword" required>
+                        </div>
+                        <button type="submit" style="float: right;">Speichern</button>
+                        <div style="clear: both;"></div>
+                    </form>
+                </div>
+
+                <div class="settings-section" style="margin-top: 40px;">
+                    <h3>E-Mail-Adresse ändern</h3>
+                    <form id="emailChangeForm">
+                        <div class="form-group">
+                            <label for="newEmail">Neue E-Mail-Adresse</label>
+                            <input type="email" id="newEmail" name="newEmail" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="emailConfirmPassword">Passwort bestätigen</label>
+                            <input type="password" id="emailConfirmPassword" name="emailConfirmPassword" required>
+                        </div>
+                        <button type="submit" style="float: right;">Speichern</button>
+                        <div style="clear: both;"></div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="popupContainer"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/general-config');
+                const config = await response.json();
+                document.getElementById('pageTitle').textContent = config['html-titel'].replace('%name', 'Einstellungen');
+            } catch (error) {
+                console.error('Fehler beim Laden der allgemeinen Konfiguration:', error);
+            }
+
+            const popupContainer = document.getElementById('popupContainer');
+
+            function showPopup(message, type = 'error') {
+                const popup = document.createElement('div');
+                popup.classList.add('popup', type);
+                popup.textContent = message;
+                popupContainer.appendChild(popup);
+
+                setTimeout(() => {
+                    popup.remove();
+                }, 3000);
+            }
+
+            // Hilfsfunktion für authentifizierte Anfragen
+            async function authenticatedFetch(url, options = {}) {
+                const token = localStorage.getItem('authToken');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    ...options.headers
+                };
+                const response = await fetch(url, { ...options, headers });
+                if (response.status === 401 || response.status === 403) {
+                    localStorage.removeItem('authToken'); // Ungültiger oder abgelaufener Token
+                    window.location.href = '/login.html'; // Zum Login umleiten
+                    throw new Error('Nicht authentifiziert oder nicht autorisiert.');
+                }
+                return response;
+            }
+
+            // Funktion zum Laden der aktuellen Benutzerdaten
+            async function loadUserData() {
+                try {
+                    const response = await authenticatedFetch('/api/user/me');
+                    if (!response.ok) {
+                        throw new Error('Benutzerdaten konnten nicht geladen werden.');
+                    }
+                    const userData = await response.json();
+                    document.getElementById('firstName').value = userData.firstName || '';
+                    document.getElementById('location').value = userData.profile.location || '';
+                    document.getElementById('personalPrompt').value = userData.profile['personal-ai-prompt'] || '';
+                } catch (error) {
+                    console.error('Fehler beim Laden der Benutzerdaten:', error);
+                    showPopup('Fehler beim Laden der Benutzerdaten.', 'error');
+                }
+            }
+
+            // Formular für persönliche Informationen
+            document.getElementById('personalInfoForm').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const firstName = document.getElementById('firstName').value;
+                const location = document.getElementById('location').value;
+                const personalPrompt = document.getElementById('personalPrompt').value;
+
+                try {
+                    const response = await authenticatedFetch('/api/user/update-profile', {
+                        method: 'POST',
+                        body: JSON.stringify({ firstName, location, personalPrompt })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showPopup('Persönliche Informationen erfolgreich gespeichert.', 'success');
+                    } else {
+                        showPopup(data.message || 'Fehler beim Speichern der persönlichen Informationen.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Fehler beim Speichern der persönlichen Informationen:', error);
+                    showPopup('Ein unerwarteter Fehler ist aufgetreten.', 'error');
+                }
+            });
+
+            // Formular für Passwortänderung
+            document.getElementById('passwordChangeForm').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+                if (newPassword !== confirmNewPassword) {
+                    showPopup('Neue Passwörter stimmen nicht überein.', 'error');
+                    return;
+                }
+
+                try {
+                    const response = await authenticatedFetch('/api/user/change-password', {
+                        method: 'POST',
+                        body: JSON.stringify({ currentPassword, newPassword })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showPopup('Passwort erfolgreich geändert.', 'success');
+                        document.getElementById('passwordChangeForm').reset();
+                    } else {
+                        showPopup(data.message || 'Fehler beim Ändern des Passworts.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Fehler beim Ändern des Passworts:', error);
+                    showPopup('Ein unerwarteter Fehler ist aufgetreten.', 'error');
+                }
+            });
+
+            // Formular für E-Mail-Änderung
+            document.getElementById('emailChangeForm').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const newEmail = document.getElementById('newEmail').value;
+                const emailConfirmPassword = document.getElementById('emailConfirmPassword').value;
+
+                try {
+                    const response = await authenticatedFetch('/api/user/change-email', {
+                        method: 'POST',
+                        body: JSON.stringify({ newEmail, password: emailConfirmPassword })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showPopup('E-Mail-Adresse erfolgreich geändert.', 'success');
+                        document.getElementById('emailChangeForm').reset();
+                    } else {
+                        showPopup(data.message || 'Fehler beim Ändern der E-Mail-Adresse.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Fehler beim Ändern der E-Mail-Adresse:', error);
+                    showPopup('Ein unerwarteter Fehler ist aufgetreten.', 'error');
+                }
+            });
+
+            // Benutzerdaten beim Laden der Seite laden
+            loadUserData();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "gemma3:1b": "Gemma 1B",
+  "gemma3:4b": "Gemma 4B",
+  "gemma3:270m": "Gemma 270M",
+  "qwen2.5-coder:1.5b": "Qwen Coder 1.5B",
+  "qwen2.5-coder:3b": "Qwen Coder 3B",
+  "qwen2.5-coder:0.5b": "Qwen Coder 500M",
+  "deepseek-r1:1.5b": "DeepSeek R 1.5B",
+  "deepseek-coder:1.3b": "DeepSeek Coder 1.3B",
+  "qwen2.5:1.5b": "Qwen 1.5B",
+  "qwen2.5:0.5b": "Qwen 500M",
+  "llama3.2:3b": "LLama 3B",
+  "llama3.2:1b": "LLama 1B"
+}

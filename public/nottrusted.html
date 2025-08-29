@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="pageTitle">Tontoo AI | Not Trusted</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <img src="nope.png" alt="AI Icon" width="128" height="128">
+        <h1>Domain Not Allowed</h1>
+        <p>This domain is not whitelisted for access to this application.</p>
+        <p>Please contact the administrator if you believe this is an error.</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/general-config');
+                const config = await response.json();
+                document.getElementById('pageTitle').textContent = config['html-titel'].replace('%name', 'Not Trusted');
+            } catch (error) {
+                console.error('Fehler beim Laden der allgemeinen Konfiguration:', error);
+            }
+        });
+    </script>
+</body>
+</html>
