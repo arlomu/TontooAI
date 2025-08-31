@@ -21,7 +21,7 @@ A **Ollama** Web UI build in NodeJS, easy to Setup
 ![Chat](pre/1.png)
 
 ### Settings
-![Settings]pre/2.png)
+![Settings](pre/2.png)
 
 ### Adminpanel Dashboard
 ![Adminpanel Dashboard](pre/3.png)
