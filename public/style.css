@@ -858,7 +858,7 @@ input, textarea, select, button {
     align-items: center;
     transition: background 0.2s ease;
     position: fixed;
-    bottom: 850px;
+    bottom: 815px;
     right: 1750px;
     z-index: 9999;
 }
