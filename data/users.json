@@ -1,0 +1,20 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "email": "arlomudrack@gmail.com",
+      "password": "$2a$10$dZ4Q7OoHXjl4prekZ.JvXe9TAWKWW8k4FTUD1xQfWBfWpCqN7EWAO",
+      "firstName": "System",
+      "max-tokens": "--",
+      "used-tokens": 956,
+      "admin": true,
+      "profile": {
+        "personal-ai-prompt": "Ich bin der Systemadministrator und verwalte diese Plattform.",
+        "location": "Serverraum"
+      },
+      "resetToken": null,
+      "resetTokenExpires": null
+    }
+  ]
+}

@@ -36,10 +36,10 @@ system-prompt: |
     Einfache Zeilenumbrüche
 
 smtp:
-  enabled: false
-  host: ''
-  port: null
+  enabled: true
+  host: 'smtp.ionos.de'
+  port: 587
   secure: false
   auth:
-    user: ''
-    pass: ''
+    user: 'nextcloud@ogobogo.de'
+    pass: 'wPE30M4r2rvqp12Fm9lW'
