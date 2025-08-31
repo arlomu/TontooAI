@@ -29,18 +29,12 @@ progress "Pulling Gemma3 model..."
 ollama pull gemma3:1b >>"$LOG_FILE" 2>&1
 progress "Installing Node.js and npm..."
 sudo apt install -y nodejs npm >>"$LOG_FILE" 2>&1
-progress "Installing Python3 and dependencies..."
-sudo apt install -y python3 python3-venv python3-pip >>"$LOG_FILE" 2>&1
-python3 -m venv openinterpreter-env >>"$LOG_FILE" 2>&1
-source openinterpreter-env/bin/activate
-pip install open-interpreter >>"$LOG_FILE" 2>&1
-progress "Starting Node.js app..."
-sudo node app.js >>"$LOG_FILE" 2>&1 &
+
 progress "Creating systemd service..."
-SERVICE_FILE="/etc/systemd/system/my-node-app.service"
+SERVICE_FILE="/etc/systemd/system/tontooai.service"
 sudo bash -c "cat > $SERVICE_FILE" <<EOL
 [Unit]
-Description=My Node.js App
+Description=TontooAI
 After=network.target
 
 [Service]
@@ -55,7 +49,7 @@ WantedBy=multi-user.target
 EOL
 progress "Enabling service on boot..."
 sudo systemctl daemon-reload >>"$LOG_FILE" 2>&1
-sudo systemctl enable my-node-app.service >>"$LOG_FILE" 2>&1
-sudo systemctl start my-node-app.service >>"$LOG_FILE" 2>&1
+sudo systemctl enable tontooai.service >>"$LOG_FILE" 2>&1
+sudo systemctl start tontooai.service >>"$LOG_FILE" 2>&1
 progress "Setup complete!"
 echo -e "\nAll done! Logs at $LOG_FILE"

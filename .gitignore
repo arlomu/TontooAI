@@ -4,4 +4,3 @@ data/chats.json
 data/stats.json
 ssl/cert.pem
 ssl/key.pem
-openinterpreter-env/*
