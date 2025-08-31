@@ -36,8 +36,9 @@ A **Ollama** Web UI build in NodeJS, easy to Setup
 ### Requirements
 
 - Node.js >= 18
-- npm
-- Ollama installed ([Installation guide](https://ollama.com/docs/install))
+- npm ## Evry Needed Software are in ![Setup.sh](setup.sh) Installing
+- Ollama
+- OpenSSL
 
 ### Clone the Repository
 
