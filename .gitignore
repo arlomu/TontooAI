@@ -3,4 +3,6 @@ data/attempts.json
 data/chats.json
 data/stats.json
 data/users.json
-ssl/*
+ssl/cert.pem
+ssl/key.pem
+openinterpreter-env/*
