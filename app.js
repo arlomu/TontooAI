@@ -82,7 +82,8 @@ const initializeData = () => {
         "trusted-domains": ["localhost", "127.0.0.1"],
         "sprache": "Deutsch",
         "system-prompt": "# Placeholders: %user-prompt% ...",
-        "smtp": {}
+        "smtp": {},
+        "message-guard-enabled": true
     });
     users = loadData(USERS_PATH, { users: [] });
     models = loadData(MODELS_PATH, {});
@@ -341,7 +342,7 @@ app.put('/api/admin/config', authenticateUser, authorizeAdmin, (req, res) => {
         // E-Mail-Transporter neu konfigurieren wenn SMTP-Einstellungen geändert wurden
         if (updatedConfig.smtp) {
             if (config.smtp && config.smtp.host && config.smtp.enabled !== false) {
-                transporter = nodemailer.createTransporter({
+                transporter = nodemailer.createTransport({
                     host: config.smtp.host,
                     port: config.smtp.port,
                     secure: config.smtp.secure,
@@ -353,7 +354,7 @@ app.put('/api/admin/config', authenticateUser, authorizeAdmin, (req, res) => {
             }
         }
         
-        res.json({ message: 'Konfiguration erfolgreich aktualisiert.' });
+        res.json({ message: 'Config updated.' });
     } catch (error) {
         console.error('Fehler beim Aktualisieren der Konfiguration:', error);
         res.status(500).json({ message: 'Fehler beim Speichern der Konfiguration.' });
@@ -369,12 +370,11 @@ app.post('/api/admin/models/manage', authenticateUser, authorizeAdmin, async (re
     }
     
     const results = [];
-    const hosts = [config.ollima.host1, config.ollima.host2].filter(host => host !== 'none');
-    
+    const hosts = [config.ollama.host1, config.ollama.host2].filter(host => host !== 'none');
     for (const host of hosts) {
         try {
             const ollamaHost = host === 'localhost' ? '127.0.0.1' : host;
-            const ollamaPort = config.ollima.port;
+            const ollamaPort = config.ollama.port;
             
             let endpoint, method, body;
             
@@ -694,23 +694,55 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
     let tokensUsed = 0;
     let durationMs = 0;
     let abortController = null;
-    
+
     try {
         const { message, model } = req.body;
         let chatId = req.headers['x-chat-id'] || null;
         const user = users.users.find(u => u.id === req.userId);
 
         if (!user) {
-            return res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+            return res.status(404).json({ message: 'User not found.' });
         }
 
         const maxTokens = user['max-tokens'] === '--' ? Infinity : parseInt(user['max-tokens']);
         if (user['used-tokens'] >= maxTokens) {
-            return res.status(403).json({ message: 'Ihr tägliches Token-Limit ist erreicht.' });
+            return res.status(403).json({ message: 'Daily token limit reached.' });
         }
 
-        if (!chats.chats) chats.chats = [];
-        
+        // --- Message Guard ---
+        if (config['message-guard-enabled']) {
+            const guardPrompt = `Bitte sage mir ob die Message angemessen ist antworte nur in true oder false false = unangemessen true = angemessen die message ist: ${message}`;
+            const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+            const ollamaPort = config.ollama.port;
+            const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'gemma3:1b';
+
+            try {
+                // Use .json() only, do not use .body.getReader() here!
+                const guardRes = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: ollamaModel,
+                        messages: [
+                            { role: 'system', content: 'Du bist ein Moderationsfilter. Antworte nur mit true oder false.' },
+                            { role: 'user', content: guardPrompt }
+                        ],
+                        stream: false
+                    })
+                });
+                if (!guardRes.ok) throw new Error('Guard check failed');
+                const guardData = await guardRes.json();
+                const guardAnswer = (guardData.message?.content || '').toLowerCase().trim();
+                if (!guardAnswer.includes('true')) {
+                    // Unangemessen!
+                    return res.status(200).json({ type: 'guard', allowed: false });
+                }
+            } catch (e) {
+                // Im Zweifel lieber blockieren
+                return res.status(200).json({ type: 'guard', allowed: false });
+            }
+        }
+
         let currentChat = chats.chats.find(c => c.id === chatId && c.user_id === req.userId);
         let isNewChat = false;
         
@@ -738,8 +770,8 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
         abortController = new AbortController();
         userGenerationControllers.set(req.userId, abortController);
 
-        const ollamaHost = config.ollima.host1 === 'localhost' ? '127.0.0.1' : config.ollima.host1;
-        const ollamaPort = config.ollima.port;
+        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaPort = config.ollama.port;
         const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
 
         const systemPrompt = config['system-prompt']
@@ -785,6 +817,7 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
             throw new Error(`Ollama API error: ${ollamaResponse.status} - ${errorText}`);
         }
 
+        // Only use .body.getReader() here (not in guard check!)
         const reader = ollamaResponse.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -1022,8 +1055,8 @@ app.post('/api/admin/models', authenticateUser, authorizeAdmin, async (req, res)
     }
 
     try {
-        const ollamaHost = config.ollima.host1;
-        const ollamaPort = config.ollima.port;
+        const ollamaHost = config.ollama.host1;
+        const ollamaPort = config.ollama.port;
         const ollamaModelInfo = await fetch(`http://${ollamaHost}:${ollamaPort}/api/show`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

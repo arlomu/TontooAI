@@ -483,6 +483,7 @@
                 messageInput.value = '';
                 messageInput.disabled = false;
 
+                // Zeige User-Message sofort
                 addMessageToChat({ 
                     id: `msg_${Date.now()}_user`, 
                     sender: 'user', 
@@ -498,11 +499,51 @@
                         signal: abortController.signal
                     });
 
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || 'Fehler beim Senden der Nachricht.');
+                    // Prüfe auf Guard-Block
+                    const contentType = response.headers.get('content-type') || '';
+                    if (contentType.includes('application/json')) {
+                        const text = await response.text();
+                        let data;
+                        try {
+                            // Suche die erste Zeile, die mit { beginnt und mit } endet
+                            const lines = text.trim().split('\n');
+                            const jsonLine = lines.find(line => line.trim().startsWith('{') && line.trim().endsWith('}'));
+                            if (!jsonLine) throw new Error('No JSON object found');
+                            data = JSON.parse(jsonLine);
+                        } catch (e) {
+                            showPopup('Fehler beim Parsen der Serverantwort.', 'error');
+                            isGeneratingResponse = false;
+                            currentMessageId = null;
+                            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                            messageInput.disabled = false;
+                            messageInput.focus();
+                            return;
+                        }
+                        if (data.type === 'guard' && data.allowed === false) {
+                            // Letzte User-Message rot markieren und Hinweis anzeigen
+                            const lastUserMsg = chatMessages.querySelector('.chat-message.user:last-child .chat-bubble');
+                            if (lastUserMsg) {
+                                lastUserMsg.style.background = '#FF4444';
+                                lastUserMsg.style.color = '#fff';
+                                lastUserMsg.innerHTML += `<br><strong>Unangemessen!</strong>`;
+                            }
+                            isGeneratingResponse = false;
+                            currentMessageId = null;
+                            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                            messageInput.disabled = false;
+                            messageInput.focus();
+                            return;
+                        }
+                        // Wenn kein Guard-Block, ignoriere die Antwort (kein Fehler anzeigen)
+                        isGeneratingResponse = false;
+                        currentMessageId = null;
+                        sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                        messageInput.disabled = false;
+                        messageInput.focus();
+                        return;
                     }
-                    
+
+                    // Stream-Handling (chunked JSON lines)
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
                     let aiResponseContent = '';
@@ -515,7 +556,13 @@
                         const lines = chunk.split('\n').filter(line => line.trim() !== '');
 
                         for (const line of lines) {
-                            const data = JSON.parse(line);
+                            let data;
+                            try {
+                                data = JSON.parse(line);
+                            } catch (e) {
+                                // Zeile ignorieren, wenn sie kein valides JSON ist
+                                continue;
+                            }
                             if (data.type === 'token') {
                                 aiResponseContent += data.token;
                                 updateLastAiMessage(data.token);

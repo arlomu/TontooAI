@@ -183,6 +183,14 @@
                                 <textarea id="systemPrompt" name="system-prompt" rows="6"></textarea>
                             </div>
                         </div>
+
+                        <div class="config-group">
+                            <h3><i class="fas fa-shield-alt"></i> KI-Schutz</h3>
+                            <div class="form-group admin-checkbox">
+                                <label for="messageGuardEnabled">KI-Message-Guard aktivieren</label>
+                                <input type="checkbox" id="messageGuardEnabled" name="message-guard-enabled">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -661,6 +669,8 @@
                     document.getElementById('configLanguage').value = config.sprache;
                     document.getElementById('systemPrompt').value = config['system-prompt'];
                     
+                    // Message Guard setting
+                    document.getElementById('messageGuardEnabled').checked = config['message-guard-enabled'] !== false;
                 } catch (error) {
                     console.error('Fehler beim Laden der Konfiguration:', error);
                     showPopup('Fehler beim Laden der Konfiguration.', 'error');
@@ -690,7 +700,8 @@
                             }
                         },
                         'sprache': document.getElementById('configLanguage').value,
-                        'system-prompt': document.getElementById('systemPrompt').value
+                        'system-prompt': document.getElementById('systemPrompt').value,
+                        'message-guard-enabled': document.getElementById('messageGuardEnabled').checked
                     };
 
                     const response = await authenticatedFetch('/api/admin/config', {
