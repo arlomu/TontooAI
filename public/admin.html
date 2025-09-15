@@ -12,23 +12,23 @@
         <div class="sidebar">
             <div class="sidebar-header" style="text-align: center; margin-bottom: 30px; color: var(--text-farbe);">
                 <img src="icon.png" alt="AI Icon" width="64" height="64">
-                <h2>Admin Panel</h2>
+                <h2 id="adminPanelTitle"></h2>
             </div>
             <nav>
                 <div class="admin-nav-item active" data-section="dashboard">
-                    <i class="fas fa-chart-line"></i> <span>Dashboard</span>
+                    <i class="fas fa-chart-line"></i> <span id="dashboardNav"></span>
                 </div>
                 <div class="admin-nav-item" data-section="users">
-                    <i class="fas fa-users"></i> <span>Benutzer</span>
+                    <i class="fas fa-users"></i> <span id="usersNav"></span>
                 </div>
                 <div class="admin-nav-item" data-section="models">
-                    <i class="fas fa-brain"></i> <span>Modelle</span>
+                    <i class="fas fa-brain"></i> <span id="modelsNav"></span>
                 </div>
                 <div class="admin-nav-item" data-section="config">
-                    <i class="fas fa-cog"></i> <span>Konfiguration</span>
+                    <i class="fas fa-cog"></i> <span id="configNav"></span>
                 </div>
                 <div class="admin-nav-item" data-section="ollama">
-                    <i class="fas fa-server"></i> <span>Ollama Server</span>
+                    <i class="fas fa-server"></i> <span id="ollamaNav"></span>
                 </div>
             </nav>
         </div>
@@ -37,22 +37,22 @@
             <div class="admin-content">
                 <!-- Dashboard Section -->
                 <div id="dashboard-section" class="admin-section active">
-                    <h2>Dashboard</h2>
+                    <h2 id="dashboardTitle"></h2>
                     <div class="dashboard-stats" style="display: flex; gap: 20px; flex-wrap: wrap;">
                         <div class="stat-card">
-                            <h3>⚡ heute</h3>
+                            <h3 id="tokenTodayTitle"></h3>
                             <p id="tokensToday">Laden...</p>
                         </div>
                         <div class="stat-card">
-                            <h3>⚡ gesamt</h3>
+                            <h3 id="tokenTotalTitle"></h3>
                             <p id="tokensOverall">Laden...</p>
                         </div>
                         <div class="stat-card">
-                            <h3>CPU-Auslastung</h3>
+                            <h3 id="cpuUsageTitle"></h3>
                             <p id="cpuUsage">Laden...</p>
                         </div>
                         <div class="stat-card">
-                            <h3>RAM-Nutzung</h3>
+                            <h3 id="ramUsageTitle"></h3>
                             <p id="ramUsage">Laden...</p>
                         </div>
                     </div>
@@ -61,20 +61,20 @@
                 <!-- Users Section -->
                 <div id="users-section" class="admin-section">
                     <div class="section-header">
-                        <h2>Benutzerverwaltung</h2>
-                        <button id="addUserBtn"><i class="fas fa-plus"></i> Neuer Benutzer</button>
+                        <h2 id="usersTitle"></h2>
+                        <button id="addUserBtn"><i class="fas fa-plus"></i> <span id="addUserBtnText"></span></button>
                     </div>
                     <table class="admin-table">
                         <thead>
                             <tr>
                                 <th>ID</th>
-                                <th>Benutzername</th>
-                                <th>E-Mail</th>
-                                <th>Name</th>
-                                <th>Max ⚡</th>
-                                <th>Genutzte ⚡</th>
-                                <th>Admin</th>
-                                <th>Aktionen</th>
+                                <th id="usernameTh"></th>
+                                <th id="emailTh"></th>
+                                <th id="nameTh"></th>
+                                <th id="maxTokensTh"></th>
+                                <th id="usedTokensTh"></th>
+                                <th id="adminTh"></th>
+                                <th id="actionsTh"></th>
                             </tr>
                         </thead>
                         <tbody id="userTableBody">
@@ -85,15 +85,15 @@
                 <!-- Models Section -->
                 <div id="models-section" class="admin-section">
                      <div class="section-header">
-                        <h2>Modellverwaltung</h2>
-                        <button id="addModelBtn"><i class="fas fa-plus"></i> Modell hinzufügen</button>
+                        <h2 id="modelsTitle"></h2>
+                        <button id="addModelBtn"><i class="fas fa-plus"></i> <span id="addModelBtnText"></span></button>
                     </div>
                     <table class="admin-table">
                         <thead>
                             <tr>
-                                <th>ID (Ollama)</th>
-                                <th>Anzeigename</th>
-                                <th>Aktionen</th>
+                                <th id="modelIdTh"></th>
+                                <th id="displayNameTh"></th>
+                                <th id="actionsModelTh"></th>
                             </tr>
                         </thead>
                         <tbody id="modelTableBody">
@@ -104,8 +104,8 @@
                 <!-- Config Section -->
                 <div id="config-section" class="admin-section">
                     <div class="section-header">
-                        <h2>System-Konfiguration</h2>
-                        <button id="saveConfigBtn"><i class="fas fa-save"></i> Konfiguration speichern</button>
+                        <h2 id="configTitle"></h2>
+                        <button id="saveConfigBtn"><i class="fas fa-save"></i> <span id="saveConfigBtnText"></span></button>
                     </div>
                     <div id="configForm">
                         <div class="config-group">
@@ -189,14 +189,14 @@
                 <!-- Ollama Management Section -->
                 <div id="ollama-section" class="admin-section">
                     <div class="section-header">
-                        <h2>Ollama Server Verwaltung</h2>
+                        <h2 id="ollamaTitle"></h2>
                         <div>
-                            <button id="pullModelBtn"><i class="fas fa-download"></i> Modell herunterladen</button>
-                            <button id="removeModelBtn" class="danger"><i class="fas fa-trash"></i> Modell entfernen</button>
+                            <button id="pullModelBtn"><i class="fas fa-download"></i> <span id="downloadModelBtnText"></span></button>
+                            <button id="removeModelBtn" class="danger"><i class="fas fa-trash"></i> <span id="removeModelBtnText"></span></button>
                         </div>
                     </div>
                     <div class="ollama-status">
-                        <h3>Server Status</h3>
+                        <h3 id="serverStatusTitle"></h3>
                         <div id="ollamaServerStatus" style="display: flex; gap: 20px; margin: 20px 0;">
                             <div class="status-card">
                                 <h4>Host 1 (<span id="host1Name">localhost</span>)</h4>
@@ -390,6 +390,69 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            // Sprachdatei laden
+            let lang = {};
+            let userLang = 'EN';
+            async function loadLangFile(langCode) {
+                const res = await fetch(`/Lang_${langCode}.json`);
+                lang = await res.json();
+            }
+            async function getUserLanguage() {
+                try {
+                    const token = localStorage.getItem('authToken');
+                    if (!token) return 'EN';
+                    const res = await fetch('/api/user/me', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!res.ok) return 'EN';
+                    const user = await res.json();
+                    return user.panelLanguage || 'EN';
+                } catch {
+                    return 'EN';
+                }
+            }
+            (async () => {
+                userLang = await getUserLanguage();
+                await loadLangFile(userLang);
+
+                // Setze alle UI-Texte
+                document.getElementById('adminPanelTitle').textContent = lang.admin_panel;
+                document.getElementById('dashboardNav').textContent = lang.dashboard;
+                document.getElementById('usersNav').textContent = lang.users;
+                document.getElementById('modelsNav').textContent = lang.models;
+                document.getElementById('configNav').textContent = lang.config;
+                document.getElementById('ollamaNav').textContent = lang.ollama;
+
+                document.getElementById('dashboardTitle').textContent = lang.dashboard;
+                document.getElementById('tokenTodayTitle').textContent = lang.token_today;
+                document.getElementById('tokenTotalTitle').textContent = lang.token_total;
+                document.getElementById('cpuUsageTitle').textContent = lang.cpu_usage;
+                document.getElementById('ramUsageTitle').textContent = lang.ram_usage;
+
+                document.getElementById('usersTitle').textContent = lang.users;
+                document.getElementById('addUserBtnText').textContent = lang.add_user;
+                document.getElementById('usernameTh').textContent = lang.username;
+                document.getElementById('emailTh').textContent = lang.email;
+                document.getElementById('nameTh').textContent = lang.name;
+                document.getElementById('maxTokensTh').textContent = lang.max_tokens;
+                document.getElementById('usedTokensTh').textContent = lang.used_tokens;
+                document.getElementById('adminTh').textContent = lang.admin;
+                document.getElementById('actionsTh').textContent = lang.actions;
+
+                document.getElementById('modelsTitle').textContent = lang.models;
+                document.getElementById('addModelBtnText').textContent = lang.add_model;
+                document.getElementById('modelIdTh').textContent = lang.model_id;
+                document.getElementById('displayNameTh').textContent = lang.display_name;
+                document.getElementById('actionsModelTh').textContent = lang.actions;
+
+                document.getElementById('configTitle').textContent = lang.config;
+                document.getElementById('saveConfigBtnText').textContent = lang.save;
+
+                document.getElementById('ollamaTitle').textContent = lang.ollama;
+                document.getElementById('downloadModelBtnText').textContent = lang.download_model;
+                document.getElementById('removeModelBtnText').textContent = lang.remove_model;
+                document.getElementById('serverStatusTitle').textContent = lang.server_status;
+            })();
             // General initialization
             (async () => {
                 try {

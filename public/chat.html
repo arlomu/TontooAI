@@ -12,8 +12,8 @@
         <div class="sidebar" id="chatSidebar">
             <div class="chat-sidebar-header">
                 <img src="/icon.png" alt="Beschreibung des Icons" width="52" height="52">
-                <button id="newChatBtn"><span style="font-size:30px;">+</span><span style="font-size:20px;">New Chat</span></button>
-                <p id="toggleSidebarBtn" title="Sidebar umschalten"></p>
+                <button id="newChatBtn"><span style="font-size:30px;">+</span><span id="newChatBtnText" style="font-size:20px;"></span></button>
+                <p id="toggleSidebarBtn" title=""></p>
             </div>
             <div class="chat-list" id="chatList">
                 <!-- Chat-Liste wird hier dynamisch geladen -->
@@ -26,7 +26,7 @@
                     <!-- Nachrichten werden hier dynamisch geladen -->
                 </div>
                 <div class="chat-input-area">
-                    <textarea id="messageInput" placeholder="Nachricht eingeben..." rows="1"></textarea>
+                    <textarea id="messageInput" placeholder="" rows="1"></textarea>
                     <button id="sendMessageBtn"><i class="fas fa-paper-plane"></i></button>
                     <select id="modelSelector" class="model-selector"></select>
                 </div>
@@ -44,9 +44,7 @@
             </div>
         </div>
     </div>
-
     <div id="popupContainer"></div>
-
     <script>
         // Globale Funktionen, die im HTML onclick verwendet werden
         window.copyCode = function(button) {
@@ -92,6 +90,36 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            // Sprachdatei laden
+            let lang = {};
+            let userLang = 'EN';
+            async function loadLangFile(langCode) {
+                const res = await fetch(`/Lang_${langCode}.json`);
+                lang = await res.json();
+            }
+            async function getUserLanguage() {
+                try {
+                    const token = localStorage.getItem('authToken');
+                    if (!token) return 'EN';
+                    const res = await fetch('/api/user/me', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!res.ok) return 'EN';
+                    const user = await res.json();
+                    return user.panelLanguage || 'EN';
+                } catch {
+                    return 'EN';
+                }
+            }
+            (async () => {
+                userLang = await getUserLanguage();
+                await loadLangFile(userLang);
+
+                document.getElementById('newChatBtnText').textContent = lang.new_chat;
+                document.getElementById('toggleSidebarBtn').title = lang.chat || 'Chat';
+                document.getElementById('messageInput').placeholder = lang.send || 'Nachricht eingeben...';
+            })();
+
             const chatSidebar = document.getElementById('chatSidebar');
             const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
             const newChatBtn = document.getElementById('newChatBtn');

@@ -9,20 +9,46 @@
 <body>
     <div class="container">
         <img src="icon.png" alt="AI Icon" width="128" height="128">
-        <h1>404</h1>
-        <p>Seite nicht gefunden.</p>
-        <button onclick="window.history.back()">Zurück</button>
+        <h1 id="notFoundTitle">404</h1>
+        <p id="notFoundText"></p>
+        <button id="backBtn"></button>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
+            // Sprachdatei laden
+            let lang = {};
+            let userLang = 'EN';
+            async function loadLangFile(langCode) {
+                const res = await fetch(`/Lang_${langCode}.json`);
+                lang = await res.json();
+            }
+            async function getUserLanguage() {
+                try {
+                    const token = localStorage.getItem('authToken');
+                    if (!token) return 'EN';
+                    const res = await fetch('/api/user/me', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!res.ok) return 'EN';
+                    const user = await res.json();
+                    return user.panelLanguage || 'EN';
+                } catch {
+                    return 'EN';
+                }
+            }
+            userLang = await getUserLanguage();
+            await loadLangFile(userLang);
+
             try {
                 const response = await fetch('/api/general-config');
                 const config = await response.json();
                 document.getElementById('pageTitle').textContent = config['html-titel'].replace('%name', '404');
-            } catch (error) {
-                console.error('Fehler beim Laden der allgemeinen Konfiguration:', error);
-            }
+            } catch (error) {}
+
+            document.getElementById('notFoundText').textContent = lang['not_found'] || 'Seite nicht gefunden.';
+            document.getElementById('backBtn').textContent = lang['back'] || 'Zurück';
+            document.getElementById('backBtn').onclick = () => window.history.back();
         });
     </script>
 </body>

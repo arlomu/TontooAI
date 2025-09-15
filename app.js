@@ -77,7 +77,7 @@ const timeString = now.toLocaleString('de-DE', {
 const initializeData = () => {
     generalConfig = loadData(GENERAL_PATH, { "name": "Tontoo AI", "html-titel": "Tontoo AI | %name", "developer": "arlomu", "github": "https://github.com/arlomu" });
     config = loadData(CONFIG_PATH, {
-        "main-port": 80, "ollama": { "port": 11434, "host1": "localhost", "host2": "none" },
+        "main-port": 80, "ollima": { "port": 11434, "host1": "localhost", "host2": "none" },
         "ssl-port": 443, "2er-port": 8080, "host": "localhost",
         "trusted-domains": ["localhost", "127.0.0.1"],
         "sprache": "Deutsch",
@@ -369,12 +369,12 @@ app.post('/api/admin/models/manage', authenticateUser, authorizeAdmin, async (re
     }
     
     const results = [];
-    const hosts = [config.ollama.host1, config.ollama.host2].filter(host => host !== 'none');
+    const hosts = [config.ollima.host1, config.ollima.host2].filter(host => host !== 'none');
     
     for (const host of hosts) {
         try {
             const ollamaHost = host === 'localhost' ? '127.0.0.1' : host;
-            const ollamaPort = config.ollama.port;
+            const ollamaPort = config.ollima.port;
             
             let endpoint, method, body;
             
@@ -438,7 +438,7 @@ app.post('/api/login', async (req, res) => {
     let attemptInfo = loginAttempts.loginAttempts[ip] || { count: 0, lastAttempt: 0, lockedUntil: 0 };
 
     if (Date.now() < attemptInfo.lockedUntil) {
-        return res.status(429).json({ message: `Zu viele Fehlversuche. Bitte warten Sie ${Math.ceil((attemptInfo.lockedUntil - Date.now()) / 1000)} Sekunden.` });
+        return res.status(429).json({ message: `Too many failed attempts. Please wait ${Math.ceil((attemptInfo.lockedUntil - Date.now()) / 1000)} seconds.` });
     }
 
     const user = users.users.find(u => u.username === username);
@@ -453,22 +453,22 @@ app.post('/api/login', async (req, res) => {
         req.session.token = uuidv4();
         req.session.save();
         
-        return res.json({ message: 'Login erfolgreich', token: req.session.token, userId: user.id });
+        return res.json({ message: 'Login successful', token: req.session.token, userId: user.id });
     } else {
         attemptInfo.count++;
         attemptInfo.lastAttempt = Date.now();
 
         if (attemptInfo.count >= 15) {
             attemptInfo.lockedUntil = Date.now() + (25 * 60 * 60 * 1000);
-            attemptInfo.message = 'Zu viele Fehlversuche. Ihr Konto ist für 25 Stunden gesperrt.';
+            attemptInfo.message = 'Too many failed attempts. Your account is locked for 25 hours.';
         } else if (attemptInfo.count >= 10) {
             attemptInfo.lockedUntil = Date.now() + (30 * 1000);
-            attemptInfo.message = 'Zu viele Fehlversuche. Bitte warten Sie 30 Sekunden.';
+            attemptInfo.message = 'Too many failed attempts. Please wait 30 seconds.';
         } else if (attemptInfo.count >= 5) {
             attemptInfo.lockedUntil = Date.now() + (3 * 1000);
-            attemptInfo.message = 'Zu viele Fehlversuche. Bitte warten Sie 3 Sekunden.';
+            attemptInfo.message = 'Too many failed attempts. Please wait 3 seconds.';
         } else {
-            attemptInfo.message = 'Benutzername oder Passwort falsch.';
+            attemptInfo.message = 'Username or password incorrect.';
         }
 
         loginAttempts.loginAttempts[ip] = attemptInfo;
@@ -488,6 +488,23 @@ app.post('/api/logout', authenticateUser, (req, res) => {
     });
 });
 
+// Benutzerprofil aktualisieren
+app.post('/api/user/update-profile', authenticateUser, (req, res) => {
+    const { firstName, location, personalPrompt, panelLanguage } = req.body;
+    const userIndex = users.users.findIndex(u => u.id === req.userId);
+
+    if (userIndex !== -1) {
+        users.users[userIndex].firstName = firstName;
+        users.users[userIndex].profile.location = location;
+        users.users[userIndex].profile['personal-ai-prompt'] = personalPrompt;
+        if (panelLanguage) users.users[userIndex].panelLanguage = panelLanguage;
+        saveData(USERS_PATH, users);
+        res.json({ message: 'Profile updated successfully.' });
+    } else {
+        res.status(404).json({ message: 'User not found.' });
+    }
+});
+
 // Benutzerdaten des aktuellen Benutzers abrufen
 app.get('/api/user/me', authenticateUser, (req, res) => {
     const user = users.users.find(u => u.id === req.userId);
@@ -501,17 +518,18 @@ app.get('/api/user/me', authenticateUser, (req, res) => {
 
 // Benutzerprofil aktualisieren
 app.post('/api/user/update-profile', authenticateUser, (req, res) => {
-    const { firstName, location, personalPrompt } = req.body;
+    const { firstName, location, personalPrompt, panelLanguage } = req.body;
     const userIndex = users.users.findIndex(u => u.id === req.userId);
 
     if (userIndex !== -1) {
         users.users[userIndex].firstName = firstName;
         users.users[userIndex].profile.location = location;
         users.users[userIndex].profile['personal-ai-prompt'] = personalPrompt;
+        if (panelLanguage) users.users[userIndex].panelLanguage = panelLanguage;
         saveData(USERS_PATH, users);
-        res.json({ message: 'Profil erfolgreich aktualisiert.' });
+        res.json({ message: 'Profile updated successfully.' });
     } else {
-        res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+        res.status(404).json({ message: 'User not found.' });
     }
 });
 
@@ -525,12 +543,12 @@ app.post('/api/user/change-password', authenticateUser, async (req, res) => {
         if (await bcrypt.compare(currentPassword, user.password)) {
             user.password = await bcrypt.hash(newPassword, 10);
             saveData(USERS_PATH, users);
-            res.json({ message: 'Passwort erfolgreich geändert.' });
+            res.json({ message: 'Password changed successfully.' });
         } else {
-            res.status(401).json({ message: 'Aktuelles Passwort ist falsch.' });
+            res.status(401).json({ message: 'Current password is incorrect.' });
         }
     } else {
-        res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+        res.status(404).json({ message: 'User not found.' });
     }
 });
 
@@ -544,12 +562,12 @@ app.post('/api/user/change-email', authenticateUser, async (req, res) => {
         if (await bcrypt.compare(password, user.password)) {
             user.email = newEmail;
             saveData(USERS_PATH, users);
-            res.json({ message: 'E-Mail-Adresse erfolgreich geändert.' });
+            res.json({ message: 'Email address changed successfully.' });
         } else {
-            res.status(401).json({ message: 'Passwort ist falsch.' });
+            res.status(401).json({ message: 'Password is incorrect.' });
         }
     } else {
-        res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+        res.status(404).json({ message: 'User not found.' });
     }
 });
 
@@ -558,17 +576,17 @@ app.post('/api/reset-password', async (req, res) => {
     const { token, newPassword } = req.body;
 
     if (!token || !newPassword) {
-        return res.status(400).json({ message: 'Token und neues Passwort sind erforderlich.' });
+        return res.status(400).json({ message: 'Token and new password are required.' });
     }
 
     if (newPassword.length < 6) {
-        return res.status(400).json({ message: 'Das Passwort muss mindestens 6 Zeichen lang sein.' });
+        return res.status(400).json({ message: 'Password must be at least 6 characters.' });
     }
 
     const user = users.users.find(u => u.resetToken === token && u.resetTokenExpires > Date.now());
 
     if (!user) {
-        return res.status(400).json({ message: 'Ungültiger oder abgelaufener Reset-Token.' });
+        return res.status(400).json({ message: 'Invalid or expired reset token.' });
     }
 
     try {
@@ -584,10 +602,10 @@ app.post('/api/reset-password', async (req, res) => {
             `<p>Hallo ${user.firstName},</p><p>Ihr Passwort für Tontoo AI wurde erfolgreich geändert.</p><p>Wenn Sie diese Änderung nicht veranlasst haben, kontaktieren Sie bitte umgehend den Administrator.</p><p>Mit freundlichen Grüßen,<br>Ihr Tontoo AI Team</p>`
         );
 
-        res.json({ message: 'Passwort erfolgreich zurückgesetzt. Sie können sich jetzt mit dem neuen Passwort anmelden.' });
+        res.json({ message: 'Password reset successfully. You can now log in with your new password.' });
     } catch (error) {
         console.error('Fehler beim Zurücksetzen des Passworts:', error);
-        res.status(500).json({ message: 'Interner Serverfehler beim Zurücksetzen des Passworts.' });
+        res.status(500).json({ message: 'Internal server error during password reset.' });
     }
 });
 
@@ -610,7 +628,7 @@ app.post('/api/request-password-reset', async (req, res) => {
             `<p>Hallo ${user.firstName},</p><p>Sie haben eine Anfrage zum Zurücksetzen Ihres Passworts für Ihr Tontoo AI-Konto gestellt.</p><p>Bitte klicken Sie auf den folgenden Link, um Ihr Passwort zurückzusetzen: <a href="${resetLink}">${resetLink}</a></p><p>Dieser Link ist 1 Stunde gültig.</p><p>Wenn Sie diese Anfrage nicht gestellt haben, ignorieren Sie diese E-Mail bitte.</p><p>Mit freundlichen Grüßen,<br>Ihr Tontoo AI Team</p>`
         );
     }
-    res.json({ message: 'Wenn die E-Mail-Adresse registriert ist, erhalten Sie in Kürze einen Link zum Zurücksetzen des Passworts.' });
+    res.json({ message: 'If the email address is registered, you will receive a password reset link shortly.' });
 });
 
 // --- Chat-Endpunkte ---
@@ -630,7 +648,7 @@ app.get('/api/chats/:id', authenticateUser, (req, res) => {
     if (chat) {
         res.json(chat);
     } else {
-        res.status(404).json({ message: 'Chat nicht gefunden.' });
+        res.status(404).json({ message: 'Chat not found.' });
     }
 });
 
@@ -645,9 +663,9 @@ app.post('/api/chats/:id/rename', authenticateUser, (req, res) => {
     if (chatIndex !== -1) {
         chats.chats[chatIndex].title = title;
         saveData(CHATS_PATH, chats);
-        res.json({ message: 'Chat erfolgreich umbenannt.' });
+        res.json({ message: 'Chat renamed successfully.' });
     } else {
-        res.status(404).json({ message: 'Chat nicht gefunden.' });
+        res.status(404).json({ message: 'Chat not found.' });
     }
 });
 
@@ -659,9 +677,9 @@ app.delete('/api/chats/:id', authenticateUser, (req, res) => {
     chats.chats = chats.chats.filter(c => !(c.id === chatId && c.user_id === req.userId));
     if (chats.chats.length < initialLength) {
         saveData(CHATS_PATH, chats);
-        res.json({ message: 'Chat erfolgreich gelöscht.' });
+        res.json({ message: 'Chat deleted successfully.' });
     } else {
-        res.status(404).json({ message: 'Chat nicht gefunden.' });
+        res.status(404).json({ message: 'Chat not found.' });
     }
 });
 
@@ -720,8 +738,8 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
         abortController = new AbortController();
         userGenerationControllers.set(req.userId, abortController);
 
-        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
-        const ollamaPort = config.ollama.port;
+        const ollamaHost = config.ollima.host1 === 'localhost' ? '127.0.0.1' : config.ollima.host1;
+        const ollamaPort = config.ollima.port;
         const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
 
         const systemPrompt = config['system-prompt']
@@ -1004,8 +1022,8 @@ app.post('/api/admin/models', authenticateUser, authorizeAdmin, async (req, res)
     }
 
     try {
-        const ollamaHost = config.ollama.host1;
-        const ollamaPort = config.ollama.port;
+        const ollamaHost = config.ollima.host1;
+        const ollamaPort = config.ollima.port;
         const ollamaModelInfo = await fetch(`http://${ollamaHost}:${ollamaPort}/api/show`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
