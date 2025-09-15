@@ -3,7 +3,7 @@
     {
       "id": 1,
       "username": "admin",
-      "email": "email@email.com",
+      "email": "arlomudrack@gmail.com",
       "password": "$2a$10$dZ4Q7OoHXjl4prekZ.JvXe9TAWKWW8k4FTUD1xQfWBfWpCqN7EWAO",
       "firstName": "System",
       "max-tokens": "--",
@@ -14,7 +14,8 @@
         "location": "Serverraum"
       },
       "resetToken": null,
-      "resetTokenExpires": null
+      "resetTokenExpires": null,
+      "panelLanguage": "EN"
     }
   ]
 }
