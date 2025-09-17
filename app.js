@@ -82,8 +82,8 @@ const initializeData = () => {
         "trusted-domains": ["localhost", "127.0.0.1"],
         "sprache": "Deutsch",
         "system-prompt": "# Placeholders: %user-prompt% ...",
-        "smtp": {},
-        "message-guard-enabled": true
+        "smtp": {}
+        // "message-guard-enabled" removed from defaults
     });
     users = loadData(USERS_PATH, { users: [] });
     models = loadData(MODELS_PATH, {});
@@ -370,11 +370,11 @@ app.post('/api/admin/models/manage', authenticateUser, authorizeAdmin, async (re
     }
     
     const results = [];
-    const hosts = [config.ollama.host1, config.ollama.host2].filter(host => host !== 'none');
+    const hosts = [config.ollima.host1, config.ollima.host2].filter(host => host !== 'none');
     for (const host of hosts) {
         try {
             const ollamaHost = host === 'localhost' ? '127.0.0.1' : host;
-            const ollamaPort = config.ollama.port;
+            const ollamaPort = config.ollima.port;
             
             let endpoint, method, body;
             
@@ -709,39 +709,7 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
             return res.status(403).json({ message: 'Daily token limit reached.' });
         }
 
-        // --- Message Guard ---
-        if (config['message-guard-enabled']) {
-            const guardPrompt = `Bitte sage mir ob die Message angemessen ist antworte nur in true oder false false = unangemessen true = angemessen die message ist: ${message}`;
-            const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
-            const ollamaPort = config.ollama.port;
-            const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'gemma3:1b';
-
-            try {
-                // Use .json() only, do not use .body.getReader() here!
-                const guardRes = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: ollamaModel,
-                        messages: [
-                            { role: 'system', content: 'Du bist ein Moderationsfilter. Antworte nur mit true oder false.' },
-                            { role: 'user', content: guardPrompt }
-                        ],
-                        stream: false
-                    })
-                });
-                if (!guardRes.ok) throw new Error('Guard check failed');
-                const guardData = await guardRes.json();
-                const guardAnswer = (guardData.message?.content || '').toLowerCase().trim();
-                if (!guardAnswer.includes('true')) {
-                    // Unangemessen!
-                    return res.status(200).json({ type: 'guard', allowed: false });
-                }
-            } catch (e) {
-                // Im Zweifel lieber blockieren
-                return res.status(200).json({ type: 'guard', allowed: false });
-            }
-        }
+        // Message-Guard entfernt: direkt weiter zur Streaming-Anfrage
 
         let currentChat = chats.chats.find(c => c.id === chatId && c.user_id === req.userId);
         let isNewChat = false;
@@ -794,7 +762,8 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
             'Content-Type': 'application/json',
             'Transfer-Encoding': 'chunked',
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
+            'X-Accel-Buffering': 'no' // Hint für reverse-proxies wie nginx: kein Buffering
+            // Entferne 'Connection: keep-alive'
         });
 
         const startTime = process.hrtime.bigint();
@@ -844,6 +813,8 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
                                 token: data.message.content,
                                 done: data.done || false
                             }) + '\n');
+                            // Direkt nach jedem Write flushen
+                            if (typeof res.flush === 'function') res.flush();
                         }
 
                         if (data.done && data.prompt_eval_count && data.eval_count) {
@@ -1109,20 +1080,30 @@ app.get('/api/admin/model-stats/:modelId', authenticateUser, authorizeAdmin, (re
     res.json(modelStat);
 });
 
-// --- 404 Error Handling ---
+// --- 404 Error Handling (einmalig) ---
 app.use((req, res, next) => {
     res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
 
-// --- Server starten ---
-http.createServer((req, res) => {
+// --- Server starten (konsolidiert, mit Fehler-Handlern) ---
+const httpServer = http.createServer((req, res) => {
     if (config['ssl-port'] && config['ssl-port'] !== 0) {
         res.writeHead(301, { "Location": `https://${req.headers.host.split(':')[0]}:${config['ssl-port']}${req.url}` });
         res.end();
     } else {
         app.handle(req, res);
     }
-}).listen(config['main-port'], () => {
+});
+
+httpServer.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+        console.error(`Port ${config['main-port']} ist bereits belegt. HTTP-Server nicht gestartet.`);
+    } else {
+        console.error('HTTP-Server Fehler:', err);
+    }
+});
+
+httpServer.listen(config['main-port'], () => {
     console.log(`HTTP-Server läuft auf Port ${config['main-port']}`);
 });
 
@@ -1131,7 +1112,17 @@ if (config['ssl-port'] && fs.existsSync(path.join(SSL_DIR, 'cert.pem')) && fs.ex
         key: fs.readFileSync(path.join(SSL_DIR, 'key.pem')),
         cert: fs.readFileSync(path.join(SSL_DIR, 'cert.pem'))
     };
-    https.createServer(options, app).listen(config['ssl-port'], () => {
+    const httpsServer = https.createServer(options, app);
+
+    httpsServer.on('error', (err) => {
+        if (err && err.code === 'EADDRINUSE') {
+            console.error(`Port ${config['ssl-port']} ist bereits belegt. HTTPS-Server nicht gestartet.`);
+        } else {
+            console.error('HTTPS-Server Fehler:', err);
+        }
+    });
+
+    httpsServer.listen(config['ssl-port'], () => {
         console.log(`HTTPS-Server läuft auf Port ${config['ssl-port']}`);
     });
 } else {
@@ -1139,7 +1130,17 @@ if (config['ssl-port'] && fs.existsSync(path.join(SSL_DIR, 'cert.pem')) && fs.ex
 }
 
 if (config['2er-port'] && config['2er-port'] !== 0 && config['2er-port'] !== config['main-port']) {
-    http.createServer(app).listen(config['2er-port'], () => {
+    const secondServer = http.createServer(app);
+
+    secondServer.on('error', (err) => {
+        if (err && err.code === 'EADDRINUSE') {
+            console.error(`Port ${config['2er-port']} ist bereits belegt. Zweiter HTTP-Server nicht gestartet.`);
+        } else {
+            console.error('Zweiter HTTP-Server Fehler:', err);
+        }
+    });
+
+    secondServer.listen(config['2er-port'], () => {
         console.log(`Zweiter HTTP-Server läuft auf Port ${config['2er-port']}`);
     });
 }

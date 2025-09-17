@@ -499,42 +499,48 @@
                         signal: abortController.signal
                     });
 
-                    // Prüfe auf Guard-Block
-                    const contentType = response.headers.get('content-type') || '';
-                    if (contentType.includes('application/json')) {
-                        const text = await response.text();
+                    // Wenn HTTP-Fehler => versuche JSON-Fallback oder Text
+                    if (!response.ok) {
+                        let errText = 'Fehler vom Server';
+                        try {
+                            const errJson = await response.json();
+                            errText = errJson.message || JSON.stringify(errJson);
+                        } catch {
+                            try { errText = await response.text(); } catch (_) {}
+                        }
+                        throw new Error(errText);
+                    }
+
+                    // Erkenne ob es sich um einen Stream handelt:
+                    const isStream = response.body && typeof response.body.getReader === 'function';
+
+                    if (!isStream) {
+                        // Keine Streaming-Antwort: parse als JSON (Guard/Fallback) oder Text
                         let data;
                         try {
-                            // Suche die erste Zeile, die mit { beginnt und mit } endet
-                            const lines = text.trim().split('\n');
-                            const jsonLine = lines.find(line => line.trim().startsWith('{') && line.trim().endsWith('}'));
-                            if (!jsonLine) throw new Error('No JSON object found');
-                            data = JSON.parse(jsonLine);
+                            data = await response.json();
                         } catch (e) {
-                            showPopup('Fehler beim Parsen der Serverantwort.', 'error');
-                            isGeneratingResponse = false;
-                            currentMessageId = null;
-                            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-                            messageInput.disabled = false;
-                            messageInput.focus();
-                            return;
+                            const text = await response.text().catch(() => '');
+                            throw new Error(text || 'Ungültige Server-Antwort.');
                         }
-                        if (data.type === 'guard' && data.allowed === false) {
-                            // Letzte User-Message rot markieren und Hinweis anzeigen
+
+                        if (data && data.type === 'guard' && data.allowed === false) {
                             const lastUserMsg = chatMessages.querySelector('.chat-message.user:last-child .chat-bubble');
                             if (lastUserMsg) {
                                 lastUserMsg.style.background = '#FF4444';
                                 lastUserMsg.style.color = '#fff';
                                 lastUserMsg.innerHTML += `<br><strong>Unangemessen!</strong>`;
                             }
-                            isGeneratingResponse = false;
-                            currentMessageId = null;
-                            sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-                            messageInput.disabled = false;
-                            messageInput.focus();
-                            return;
+                        } else if (data && data.type === 'error') {
+                            throw new Error(data.message || 'Serverfehler');
+                        } else {
+                            // andere nicht-gestreamte erfolgreiche Antwort — zeige ggf. Nachricht
+                            if (data && data.message) {
+                                showPopup(data.message, 'success');
+                            }
                         }
-                        // Wenn kein Guard-Block, ignoriere die Antwort (kein Fehler anzeigen)
+
+                        // Fertig mit nicht-streaming Antwort
                         isGeneratingResponse = false;
                         currentMessageId = null;
                         sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
@@ -547,11 +553,12 @@
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
                     let aiResponseContent = '';
+                    let streamEnded = false;
 
                     while (true) {
                         const { value, done } = await reader.read();
                         if (done) break;
-                        
+
                         const chunk = decoder.decode(value, { stream: true });
                         const lines = chunk.split('\n').filter(line => line.trim() !== '');
 
@@ -560,7 +567,7 @@
                             try {
                                 data = JSON.parse(line);
                             } catch (e) {
-                                // Zeile ignorieren, wenn sie kein valides JSON ist
+                                console.warn("Konnte Stream-Zeile nicht parsen:", line);
                                 continue;
                             }
                             if (data.type === 'token') {
@@ -568,16 +575,16 @@
                                 updateLastAiMessage(data.token);
                             } else if (data.type === 'end') {
                                 updateLastAiMessage('', true, { tokens: data.tokens, time: data.time });
-                                if (data.isNewChat) {
-                                    currentChatId = data.chatId;
-                                }
+                                if (data.isNewChat) currentChatId = data.chatId;
                                 loadChatList();
                                 loadUserInfo();
+                                streamEnded = true;
                                 break;
                             } else if (data.type === 'error') {
-                                throw new Error(data.message);
+                                throw new Error(data.message || 'Fehler vom Server im Stream');
                             }
                         }
+                        if (streamEnded) break;
                     }
                 } catch (error) {
                     if (error.name !== 'AbortError') {

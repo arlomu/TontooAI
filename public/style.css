@@ -496,10 +496,14 @@ button.danger {
 }
 
 .chat-sidebar-header {
+    /* Icon oben, Button direkt darunter: vertikale Anordnung */
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: flex-start;
     align-items: center;
-    margin-bottom: 50px;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding-top: 8px;
     color: var(--text-farbe);
 }
 
@@ -847,22 +851,30 @@ input, textarea, select, button {
 }
 
 #newChatBtn {
+    /* Button nun im Header platziert: keine fixe Bildschirm-Position mehr */
     background-color: #34354100;
     color: white;
     border: none;
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 8px 12px;
     font-size: 14px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    transition: background 0.2s ease;
-    position: fixed;
-    bottom: 815px;
-    right: 1750px;
-    z-index: 9999;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.2s ease, transform 0.12s ease;
+    position: relative;
+    z-index: 20; /* über Chat-Liste */
+    margin-top: 4px;
 }
 
-#newChatBtn:hover {
-    background-color: #52545c;
+/* Kleineres Verhalten, wenn Sidebar eingeklappt ist */
+.sidebar.collapsed .chat-sidebar-header {
+    gap: 4px;
+}
+
+.sidebar.collapsed #newChatBtn {
+    padding: 6px;
+    font-size: 12px;
 }
