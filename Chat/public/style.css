@@ -1008,6 +1008,21 @@ input, textarea, select, button {
 
 /* Code Interpreter Styles - zu deiner style.css hinzufügen */
 
+.loading-indicator {
+    display: none;
+    text-align: center;
+    padding: 10px;
+    color: #666;
+}
+
+.loading-indicator.active {
+    display: block;
+}
+
+.loading-indicator i {
+    margin-right: 8px;
+}
+
 /* Loading Spinner für verschiedene Features */
 .codeinterpreter-loading {
     color: #ff6b35;

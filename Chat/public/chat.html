@@ -6,6 +6,20 @@
     <title id="pageTitle">Tontoo AI | Chat</title>
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .loading-indicator {
+            display: none;
+            text-align: center;
+            padding: 10px;
+            color: #666;
+        }
+        .loading-indicator.active {
+            display: block;
+        }
+        .loading-indicator i {
+            margin-right: 8px;
+        }
+    </style>
 </head>
 <body>
     <div class="main-layout">
@@ -24,6 +38,9 @@
             <div class="chat-main">
                 <div class="chat-messages" id="chatMessages">
                     <!-- Nachrichten werden hier dynamisch geladen -->
+                </div>
+                <div class="loading-indicator" id="loadingIndicator">
+                    <i class="fas fa-spinner fa-spin"></i><span id="loadingMessage"></span>
                 </div>
                 <div class="chat-input-area">
                     <div class="feature-menu-container">
@@ -76,7 +93,7 @@
             });
         };
 
-        let activeFeature = null; // Track active feature (null, 'Codeinterpreter', 'Websearch', 'DeepSearch')
+        let activeFeature = null;
 
         function toggleFeature(featureName) {
             console.log('Toggling feature:', featureName);
@@ -202,6 +219,8 @@
             const sendMessageBtn = document.getElementById('sendMessageBtn');
             const modelSelector = document.getElementById('modelSelector');
             const logoutBtn = document.getElementById('logoutBtn');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const loadingMessage = document.getElementById('loadingMessage');
 
             let currentChatId = null;
             let isGeneratingResponse = false;
@@ -412,6 +431,7 @@
                         sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
                         messageInput.disabled = false;
                         messageInput.focus();
+                        loadingIndicator.classList.remove('active');
                     }
                 } catch (error) {
                     console.error('Fehler beim Stoppen der Generation:', error);
@@ -470,7 +490,6 @@
                     );
                 });
 
-                // Websearch Results
                 if (websearchResults && websearchResults.quellen && Array.isArray(websearchResults.quellen)) {
                     const urlsHtml = websearchResults.quellen
                         .filter(url => url && typeof url === 'string' && url.startsWith('http'))
@@ -481,7 +500,6 @@
                     }
                 }
 
-                // Deepsearch Results
                 if (deepsearchResults && deepsearchResults.quellen && Array.isArray(deepsearchResults.quellen)) {
                     const urlsHtml = deepsearchResults.quellen
                         .filter(url => url && typeof url === 'string' && url.startsWith('http'))
@@ -492,7 +510,6 @@
                     }
                 }
 
-                // Code Execution Results
                 if (codeExecutionResults) {
                     let parsedResults;
                     try {
@@ -572,22 +589,12 @@
                     ? `<div class="chat-message-info">⚡ ${message.tokens} ⌛ ${message.time}s</div>`
                     : '';
 
-                let contentHtml = formatMessageContent(
+                const contentHtml = formatMessageContent(
                     message.content, 
                     message.websearchResults, 
                     message.deepsearchResults,
                     message.codeexecution_results || message.codeExecutionResults
                 );
-
-                if (message.isWebsearchPending) {
-                    contentHtml = '<i class="fas fa-spinner fa-spin websearch-loading"></i> Websearch läuft...';
-                }
-                if (message.isDeepsearchPending) {
-                    contentHtml = '<i class="fas fa-spinner fa-spin deepsearch-loading"></i> Deepsearch läuft...';
-                }
-                if (message.isCodeExecutionPending) {
-                    contentHtml = '<i class="fas fa-spinner fa-spin codeinterpreter-loading"></i> Code wird ausgeführt...';
-                }
 
                 messageElement.innerHTML = `
                     <div class="icon">${iconHtml}</div>
@@ -625,6 +632,17 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
 
+            function showLoadingIndicator(message) {
+                loadingMessage.textContent = message;
+                loadingIndicator.classList.add('active');
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function hideLoadingIndicator() {
+                loadingIndicator.classList.remove('active');
+                loadingMessage.textContent = '';
+            }
+
             function renderChatMessages(messages) {
                 chatMessages.innerHTML = '';
                 messages.forEach(msg => {
@@ -653,23 +671,11 @@
                     content 
                 });
 
-                let loadingMessage = { 
-                    id: currentMessageId, 
-                    sender: 'ai', 
-                    content: '' 
-                };
-
-                if (activeFeature === 'Codeinterpreter') {
-                    loadingMessage.isCodeExecutionPending = true;
-                } else if (activeFeature === 'Websearch') {
-                    loadingMessage.isWebsearchPending = true;
-                } else if (activeFeature === 'DeepSearch') {
-                    loadingMessage.isDeepsearchPending = true;
-                } else {
-                    loadingMessage.content = '<i class="fas fa-spinner fa-spin normal-loading"></i> KI antwortet...';
-                }
-
-                addMessageToChat(loadingMessage);
+                let loadingMessageText = activeFeature === 'Codeinterpreter' ? 'Code wird ausgeführt...' :
+                                        activeFeature === 'Websearch' ? 'Websearch läuft...' :
+                                        activeFeature === 'DeepSearch' ? 'Deepsearch läuft...' :
+                                        'KI antwortet...';
+                showLoadingIndicator(loadingMessageText);
 
                 try {
                     abortController = new AbortController();
@@ -767,6 +773,7 @@
                         sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
                         messageInput.disabled = false;
                         messageInput.focus();
+                        hideLoadingIndicator();
                         return;
                     }
 
@@ -779,11 +786,6 @@
                     let codeExecutionResults = null;
                     let buffer = '';
                     
-                    const lastAiMessage = chatMessages.querySelector('.chat-message.ai:last-child');
-                    if (lastAiMessage) {
-                        lastAiMessage.remove();
-                    }
-
                     try {
                         while (true) {
                             const { done, value } = await reader.read();
@@ -809,20 +811,24 @@
                                     continue;
                                 }
 
-                                if (data.type === 'token') {
+                                if (data.type === 'progress') {
+                                    showLoadingIndicator(data.message);
+                                } else if (data.type === 'token') {
                                     aiResponseContent += data.token;
                                     updateLastAiMessage(data.token, false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    hideLoadingIndicator();
                                 } else if (data.type === 'websearch') {
                                     websearchResults = data.websearchResults;
                                     updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    hideLoadingIndicator();
                                 } else if (data.type === 'deepsearch') {
                                     deepsearchResults = data.deepsearchResults;
                                     updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    hideLoadingIndicator();
                                 } else if (data.type === 'codeexecution') {
                                     codeExecutionResults = data.codeExecutionResults;
                                     updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
-                                } else if (data.type === 'progress') {
-                                    updateLastAiMessage(data.message + '\n', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    hideLoadingIndicator();
                                 } else if (data.type === 'end') {
                                     updateLastAiMessage('', true, { tokens: data.tokens, time: data.time }, websearchResults, deepsearchResults, codeExecutionResults);
                                     if (data.isNewChat) currentChatId = data.chatId;
@@ -839,6 +845,7 @@
                                         showPopup(`${activeFeature} deaktiviert.`, 'info');
                                         activeFeature = null;
                                     }
+                                    hideLoadingIndicator();
                                     break;
                                 } else if (data.type === 'error') {
                                     throw new Error(data.details || data.message || 'Fehler vom Server im Stream');
@@ -867,6 +874,7 @@
                     sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
                     messageInput.disabled = false;
                     messageInput.focus();
+                    hideLoadingIndicator();
                 }
             }
 
