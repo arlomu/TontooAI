@@ -31,13 +31,13 @@
                             <i class="fas fa-plus"></i>
                         </button>
                         <div class="feature-menu" id="featureMenu">
-                            <button class="feature-menu-item" onclick="showFeaturePopup('Codeinterpreter')">
+                            <button class="feature-menu-item" id="codeInterpreterBtn" onclick="toggleFeature('Codeinterpreter')">
                                 <i class="fas fa-code"></i>Codeinterpreter
                             </button>
-                            <button class="feature-menu-item" onclick="showFeaturePopup('Websearch')">
+                            <button class="feature-menu-item" id="websearchBtn" onclick="toggleFeature('Websearch')">
                                 <i class="fas fa-search"></i>Websearch
                             </button>
-                            <button class="feature-menu-item" onclick="showFeaturePopup('DeepSearch')">
+                            <button class="feature-menu-item" id="deepSearchBtn" onclick="toggleFeature('DeepSearch')">
                                 <i class="fas fa-search-plus"></i>DeepSearch
                             </button>
                         </div>
@@ -63,7 +63,7 @@
     </div>
     <div id="popupContainer"></div>
     <script>
-        // Globale Funktionen, die im HTML onclick verwendet werden
+        // Globale Funktionen
         window.copyCode = function(button) {
             const codeElement = button.closest('.code-block').querySelector('code');
             const textToCopy = codeElement.textContent;
@@ -76,10 +76,24 @@
             });
         };
 
-        // Feature Menu Funktionen
-        function showFeaturePopup(featureName) {
-            showPopup(`${featureName} ist nicht verfügbar`, 'info');
-            // Menü nach Klick schließen
+        let activeFeature = null; // Track active feature (null, 'Codeinterpreter', 'Websearch', 'DeepSearch')
+
+        function toggleFeature(featureName) {
+            // If trying to activate a feature when another is active, show a message
+            if (activeFeature && activeFeature !== featureName) {
+                showPopup(`Nur eine Funktion kann aktiv sein. Deaktiviere ${activeFeature} zuerst.`, 'info');
+                return;
+            }
+
+            // Toggle the feature
+            if (activeFeature === featureName) {
+                activeFeature = null;
+                document.getElementById(`${featureName.toLowerCase()}Btn`).classList.remove('active');
+            } else {
+                activeFeature = featureName;
+                document.querySelectorAll('.feature-menu-item').forEach(btn => btn.classList.remove('active'));
+                document.getElementById(`${featureName.toLowerCase()}Btn`).classList.add('active');
+            }
             document.getElementById('featureMenu').classList.remove('active');
         }
 
@@ -114,7 +128,6 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Sprachdatei laden
             let lang = {};
             let userLang = 'EN';
             async function loadLangFile(langCode) {
@@ -153,14 +166,12 @@
                 featureMenu.classList.toggle('active');
             });
             
-            // Menü schließen wenn woanders hingeklickt wird
             document.addEventListener('click', (e) => {
                 if (!featureMenu.contains(e.target) && e.target !== featureMenuBtn) {
                     featureMenu.classList.remove('active');
                 }
             });
             
-            // Verhindern dass Klicks im Menü es schließen
             featureMenu.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
@@ -180,7 +191,6 @@
             let abortController = new AbortController();
             let currentMessageId = null;
 
-            // --- Allgemeine Initialisierung ---
             (async () => {
                 try {
                     const response = await fetch('/api/general-config');
@@ -191,13 +201,6 @@
                 }
             })();
             
-            // --- Authentifizierung und User-Info ---
-            const token = localStorage.getItem('authToken');
-            if (!token) {
-                window.location.href = '/login.html';
-                return;
-            }
-
             async function loadUserInfo() {
                 try {
                     const response = await authenticatedFetch('/api/user/me');
@@ -247,7 +250,6 @@
                 if (!userInfoFooter.contains(event.target)) userInfoPopup.classList.remove('active');
             });
 
-            // --- Chat Sidebar ---
             toggleSidebarBtn.addEventListener('click', () => {
                 chatSidebar.classList.toggle('collapsed');
             });
@@ -352,7 +354,6 @@
                 }
             }
             
-            // --- Modell-Lader ---
             async function loadModels() {
                 try {
                     const response = await authenticatedFetch('/api/models');
@@ -378,12 +379,10 @@
                 }
             }
 
-            // --- Stop Generation Funktion ---
             async function stopGeneration() {
                 if (!isGeneratingResponse) return;
                 
                 try {
-                    // Sende Stop-Request an den Server
                     const response = await authenticatedFetch('/api/stop', {
                         method: 'POST',
                         body: JSON.stringify({ messageId: currentMessageId })
@@ -398,13 +397,11 @@
                 }
             }
 
-            // --- Chat-Nachrichten-Logik ---
             function escapeHtml(text) {
                 return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
             }
 
-            function formatMessageContent(content) {
-                // Temporäre Markierung für Code-Blöcke, um sie vor der Verarbeitung zu schützen
+            function formatMessageContent(content, websearchResults = null, deepsearchResults = null) {
                 const codeBlockPlaceholders = [];
                 content = content.replace(/```([\s\S]*?)```/g, (match, codeContent) => {
                     const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
@@ -416,7 +413,6 @@
                     return placeholder;
                 });
 
-                // Temporäre Markierung für Inline-Code
                 const inlineCodePlaceholders = [];
                 content = content.replace(/`([^`]+)`/g, (match, codeContent) => {
                     const placeholder = `___INLINE_CODE_${inlineCodePlaceholders.length}___`;
@@ -428,19 +424,12 @@
                     return placeholder;
                 });
 
-                // HTML-Escaping für den restlichen Text
                 let formattedContent = escapeHtml(content);
                 
-                // Fett-Text verarbeiten
                 formattedContent = formattedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                
-                // Kursiv-Text verarbeiten
                 formattedContent = formattedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
-                
-                // Zeilenumbrüche
                 formattedContent = formattedContent.replace(/\n/g, '<br>');
                 
-                // Code-Block-Platzhalter ersetzen
                 codeBlockPlaceholders.forEach(item => {
                     const language = item.content.split('\n')[0].match(/^(\w+)/);
                     const lang = language ? language[1] : 'text';
@@ -452,13 +441,26 @@
                     );
                 });
                 
-                // Inline-Code-Platzhalter ersetzen
                 inlineCodePlaceholders.forEach(item => {
                     formattedContent = formattedContent.replace(
                         item.placeholder,
                         `<code class="inline-code">${escapeHtml(item.content)}</code>`
                     );
                 });
+
+                if (websearchResults && websearchResults.quellen && websearchResults.quellen.length > 0) {
+                    const urlsHtml = websearchResults.quellen.map(url => 
+                        `<a href="${url}" target="_blank" class="websearch-url">${url}</a>`
+                    ).join('<br>');
+                    formattedContent += `<div class="websearch-results"><strong>Websearch Quellen:</strong><br>${urlsHtml}</div>`;
+                }
+
+                if (deepsearchResults && deepsearchResults.quellen && deepsearchResults.quellen.length > 0) {
+                    const urlsHtml = deepsearchResults.quellen.map(url => 
+                        `<a href="${url}" target="_blank" class="deepsearch-url">${url}</a>`
+                    ).join('<br>');
+                    formattedContent += `<div class="deepsearch-results"><strong>Deepsearch Quellen:</strong><br>${urlsHtml}</div>`;
+                }
                 
                 return formattedContent;
             }
@@ -469,15 +471,22 @@
                 messageElement.dataset.messageId = message.id;
 
                 const iconHtml = message.sender === 'user' ? 'DU' : '<img src="icon.png" alt="AI Icon" width="32" height="32">';
-                // Info-Container wird nur für die endgültige AI-Nachricht hinzugefügt
                 const infoHtml = message.sender === 'ai' && message.tokens !== undefined
                     ? `<div class="chat-message-info">⚡ ${message.tokens} ⌛ ${message.time}s</div>`
                     : '';
 
+                let contentHtml = formatMessageContent(message.content, message.websearchResults, message.deepsearchResults);
+                if (message.isWebsearchPending) {
+                    contentHtml = '<i class="fas fa-spinner fa-spin websearch-loading"></i> Websearch läuft...';
+                }
+                if (message.isDeepsearchPending) {
+                    contentHtml = '<i class="fas fa-spinner fa-spin deepsearch-loading"></i> Deepsearch läuft...';
+                }
+
                 messageElement.innerHTML = `
                     <div class="icon">${iconHtml}</div>
                     <div class="chat-bubble-container">
-                        <div class="chat-bubble">${formatMessageContent(message.content)}</div>
+                        <div class="chat-bubble">${contentHtml}</div>
                         ${infoHtml}
                     </div>`;
                 
@@ -485,13 +494,12 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
 
-            function updateLastAiMessage(chunk, isDone = false, stats = {}) {
+            function updateLastAiMessage(chunk, isDone = false, stats = {}, websearchResults = null, deepsearchResults = null) {
                 let lastMessageElement = chatMessages.querySelector('.chat-message.ai:last-child');
                 
-                // Falls noch kein AI-Nachrichten-Element existiert, erstelle es
                 if (!lastMessageElement) {
-                     addMessageToChat({ id: `msg_${Date.now()}_ai`, sender: 'ai', content: '' });
-                     lastMessageElement = chatMessages.querySelector('.chat-message.ai:last-child');
+                    addMessageToChat({ id: `msg_${Date.now()}_ai`, sender: 'ai', content: '' });
+                    lastMessageElement = chatMessages.querySelector('.chat-message.ai:last-child');
                 }
                 
                 const bubble = lastMessageElement.querySelector('.chat-bubble');
@@ -499,11 +507,9 @@
                 const newContent = currentContent + chunk;
                 bubble.dataset.rawContent = newContent;
                 
-                // Nur den neuen Token hinzufügen (statt den gesamten Inhalt neu zu rendern)
-                bubble.innerHTML = formatMessageContent(newContent);
+                bubble.innerHTML = formatMessageContent(newContent, websearchResults, deepsearchResults);
 
                 if (isDone) {
-                    // Füge den Info-Container nur hinzu, wenn die Nachricht abgeschlossen ist
                     const infoContainer = document.createElement('div');
                     infoContainer.classList.add('chat-message-info');
                     infoContainer.innerHTML = `⚡ ${stats.tokens} ⌛ ${stats.time}s`;
@@ -528,7 +534,6 @@
                 messageInput.value = '';
                 messageInput.disabled = false;
 
-                // Zeige User-Message sofort
                 addMessageToChat({ 
                     id: `msg_${Date.now()}_user`, 
                     sender: 'user', 
@@ -537,14 +542,31 @@
 
                 try {
                     abortController = new AbortController();
-                    const response = await authenticatedFetch('/api/chat/send', {
-                        method: 'POST',
-                        headers: { 'X-Chat-ID': currentChatId || '' },
-                        body: JSON.stringify({ message: content, model: modelSelector.value }),
-                        signal: abortController.signal
-                    });
+                    let response;
 
-                    // Wenn HTTP-Fehler => versuche JSON-Fallback oder Text
+                    if (activeFeature === 'Websearch') {
+                        response = await authenticatedFetch('/api/websearch', {
+                            method: 'POST',
+                            headers: { 'X-Chat-ID': currentChatId || '' },
+                            body: JSON.stringify({ message: content, model: modelSelector.value }),
+                            signal: abortController.signal
+                        });
+                    } else if (activeFeature === 'DeepSearch') {
+                        response = await authenticatedFetch('/api/deepsearch', {
+                            method: 'POST',
+                            headers: { 'X-Chat-ID': currentChatId || '' },
+                            body: JSON.stringify({ message: content, model: modelSelector.value }),
+                            signal: abortController.signal
+                        });
+                    } else {
+                        response = await authenticatedFetch('/api/chat/send', {
+                            method: 'POST',
+                            headers: { 'X-Chat-ID': currentChatId || '' },
+                            body: JSON.stringify({ message: content, model: modelSelector.value }),
+                            signal: abortController.signal
+                        });
+                    }
+
                     if (!response.ok) {
                         let errText = 'Fehler vom Server';
                         try {
@@ -556,11 +578,9 @@
                         throw new Error(errText);
                     }
 
-                    // Erkenne ob es sich um einen Stream handelt:
                     const isStream = response.body && typeof response.body.getReader === 'function';
 
                     if (!isStream) {
-                        // Keine Streaming-Antwort: parse als JSON (Guard/Fallback) oder Text
                         let data;
                         try {
                             data = await response.json();
@@ -579,13 +599,11 @@
                         } else if (data && data.type === 'error') {
                             throw new Error(data.message || 'Serverfehler');
                         } else {
-                            // andere nicht-gestreamte erfolgreiche Antwort — zeige ggf. Nachricht
                             if (data && data.message) {
                                 showPopup(data.message, 'success');
                             }
                         }
 
-                        // Fertig mit nicht-streaming Antwort
                         isGeneratingResponse = false;
                         currentMessageId = null;
                         sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
@@ -594,11 +612,12 @@
                         return;
                     }
 
-                    // Stream-Handling (chunked JSON lines)
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
                     let aiResponseContent = '';
                     let streamEnded = false;
+                    let websearchResults = null;
+                    let deepsearchResults = null;
 
                     while (true) {
                         const { value, done } = await reader.read();
@@ -617,13 +636,24 @@
                             }
                             if (data.type === 'token') {
                                 aiResponseContent += data.token;
-                                updateLastAiMessage(data.token);
+                                updateLastAiMessage(data.token, false, {}, websearchResults, deepsearchResults);
+                            } else if (data.type === 'websearch') {
+                                websearchResults = data.websearchResults;
+                                updateLastAiMessage('', false, {}, websearchResults, deepsearchResults);
+                            } else if (data.type === 'deepsearch') {
+                                deepsearchResults = data.deepsearchResults;
+                                updateLastAiMessage('', false, {}, websearchResults, deepsearchResults);
                             } else if (data.type === 'end') {
-                                updateLastAiMessage('', true, { tokens: data.tokens, time: data.time });
+                                updateLastAiMessage('', true, { tokens: data.tokens, time: data.time }, websearchResults, deepsearchResults);
                                 if (data.isNewChat) currentChatId = data.chatId;
                                 loadChatList();
                                 loadUserInfo();
                                 streamEnded = true;
+                                // Deaktiviere das Feature nach Abschluss
+                                if (activeFeature) {
+                                    document.getElementById(`${activeFeature.toLowerCase()}Btn`).classList.remove('active');
+                                    activeFeature = null;
+                                }
                                 break;
                             } else if (data.type === 'error') {
                                 throw new Error(data.message || 'Fehler vom Server im Stream');
@@ -664,7 +694,6 @@
                 }
             });
 
-            // --- Initialisierung ---
             loadUserInfo();
             loadChatList();
             loadModels();

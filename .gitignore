@@ -5,3 +5,4 @@ Chat/data/stats.json
 Chat/ssl/cert.pem
 Chat/ssl/key.pem
 Web-search/node_modules/*
+Deep-search/node_modules/*

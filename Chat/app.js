@@ -652,6 +652,614 @@ app.get('/api/chats/:id', authenticateUser, (req, res) => {
     }
 });
 
+// Websearch-Endpunkt
+app.post('/api/websearch', authenticateUser, async (req, res) => {
+    let aiFullResponse = '';
+    let tokensUsed = 0;
+    let durationMs = 0;
+    let abortController = null;
+    const currentMessageId = `temp_${uuidv4()}`; // Temporäre ID für den Loading-Status
+    let currentChat = null; // Initialisiere currentChat hier
+
+    try {
+        const { message, model } = req.body;
+        let chatId = req.headers['x-chat-id'] || null;
+        const user = users.users.find(u => u.id === req.userId);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const maxTokens = user['max-tokens'] === '--' ? Infinity : parseInt(user['max-tokens']);
+        if (user['used-tokens'] >= maxTokens) {
+            return res.status(403).json({ message: 'Daily token limit reached.' });
+        }
+
+        currentChat = chats.chats.find(c => c.id === chatId && c.user_id === req.userId);
+        let isNewChat = false;
+        
+        if (!currentChat) {
+            chatId = uuidv4();
+            currentChat = {
+                id: chatId,
+                user_id: user.id,
+                title: message.substring(0, 15) + (message.length > 15 ? '...' : ''),
+                messages: [],
+                createdAt: new Date().toISOString()
+            };
+            chats.chats.push(currentChat);
+            isNewChat = true;
+        }
+
+        currentChat.messages.push({
+            id: uuidv4(),
+            sender: 'user',
+            content: message
+        });
+        saveData(CHATS_PATH, chats);
+
+        abortController = new AbortController();
+        userGenerationControllers.set(req.userId, abortController);
+
+        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaPort = config.ollama.port;
+        const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
+
+        // System-Prompt für Suchbegriffe
+        const websearchPrompt = `Du bist ein Generator für Suchbegriffe. Basierend auf der Eingabe des Nutzers, generiere ein JSON-Objekt mit genau drei relevanten Suchbegriffen und dem verwendeten Modell. Die Ausgabe muss exakt diesem Format entsprechen und darf nur das JSON-Objekt enthalten, ohne zusätzlichen Text oder Erklärungen:
+{
+    "suchworter": ["begriff1", "begriff2", "begriff3"],
+    "model": "${ollamaModel}"
+}
+Beispiel für die Eingabe "Apfel":
+{
+    "suchworter": ["Äpfel", "Apfelbaum", "Apfelkuchen"],
+    "model": "${ollamaModel}"
+}
+Nutzer-Eingabe: ${message}`;
+
+        const ollamaMessages = [
+            { role: 'system', content: websearchPrompt },
+            { role: 'user', content: message }
+        ];
+
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        });
+
+        // Temporäre Nachricht für Websearch-Loading hinzufügen
+        currentChat.messages.push({
+            id: currentMessageId,
+            sender: 'ai',
+            content: 'Websearch läuft...',
+            isWebsearchPending: true
+        });
+        saveData(CHATS_PATH, chats);
+
+        const startTime = process.hrtime.bigint();
+
+        // Schritt 1: Suchbegriffe von Ollama generieren
+        const searchTermResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: ollamaMessages,
+                stream: false
+            }),
+            signal: abortController.signal
+        });
+
+        if (!searchTermResponse.ok) {
+            const errorText = await searchTermResponse.text();
+            throw new Error(`Ollama API error: ${searchTermResponse.status} - ${errorText}`);
+        }
+
+        const searchTermData = await searchTermResponse.json();
+        let searchTerms;
+        try {
+            if (!searchTermData.message || !searchTermData.message.content) {
+                throw new Error('Ollama response is empty or missing message content');
+            }
+            console.log('Ollama search terms response (raw):', searchTermData.message.content); // Debugging-Log
+
+            // Markdown-Markierungen entfernen
+            let cleanedResponse = searchTermData.message.content
+                .replace(/```json\n|\n```/g, '') // Entfernt ```json und ```
+                .replace(/```/g, '') // Entfernt verbleibende ```
+                .trim();
+            console.log('Cleaned Ollama response:', cleanedResponse); // Debugging-Log
+
+            searchTerms = JSON.parse(cleanedResponse);
+            if (!searchTerms.suchworter || !Array.isArray(searchTerms.suchworter) || searchTerms.suchworter.length !== 3 || !searchTerms.model) {
+                throw new Error('Ollama response does not match expected format: Must contain exactly 3 search terms and a model');
+            }
+        } catch (e) {
+            console.error('Invalid search terms format from Ollama:', e.message, 'Response:', searchTermData.message?.content || 'No content');
+            throw new Error(`Invalid search terms format from Ollama: ${e.message}`);
+        }
+
+        console.log('Final search terms sent to Websearch API:', searchTerms); // Debugging-Log
+
+        // Schritt 2: Suchbegriffe an localhost:53564 senden
+        const websearchResponse = await fetch('http://localhost:53564', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(searchTerms),
+            signal: abortController.signal
+        });
+
+        if (!websearchResponse.ok) {
+            const errorText = await websearchResponse.text();
+            throw new Error(`Websearch API error: ${websearchResponse.status} - ${errorText}`);
+        }
+
+        const websearchResult = await websearchResponse.json();
+        const { zusammenfassung, quellen } = websearchResult;
+
+        console.log('Websearch result quellen:', quellen); // Debugging-Log für Quellen
+
+        // Temporäre Nachricht entfernen
+        currentChat.messages = currentChat.messages.filter(msg => msg.id !== currentMessageId);
+        saveData(CHATS_PATH, chats);
+
+        // Schritt 3: Finale AI-Antwort mit normalem System-Prompt generieren
+        const systemPrompt = config['system-prompt']
+            .replace('%user-prompt%', user.profile['personal-ai-prompt'] || '')
+            .replace('%user-name%', user.firstName || 'User')
+            .replace('%user-location%', user.profile.location || 'unbekannt')
+            .replace('%model%', ollamaModel)
+            .replace('%sprache%', config.sprache)
+            .replace('%time%', new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
+
+        const finalMessages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `${message}\n\nWebsearch Zusammenfassung: ${zusammenfassung}` }
+        ];
+
+        const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: finalMessages,
+                stream: true
+            }),
+            signal: abortController.signal
+        });
+
+        if (!ollamaResponse.ok) {
+            const errorText = await ollamaResponse.text();
+            throw new Error(`Ollama API error: ${ollamaResponse.status} - ${errorText}`);
+        }
+
+        const reader = ollamaResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+            // Websearch-Ergebnisse (Quellen) sofort senden
+            res.write(JSON.stringify({
+                type: 'websearch',
+                websearchResults: { quellen }
+            }) + '\n');
+            if (typeof res.flush === 'function') res.flush();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+                    
+                    try {
+                        const data = JSON.parse(line);
+                        
+                        if (data.message && data.message.content) {
+                            aiFullResponse += data.message.content;
+                            res.write(JSON.stringify({
+                                type: 'token',
+                                token: data.message.content,
+                                done: data.done || false
+                            }) + '\n');
+                            if (typeof res.flush === 'function') res.flush();
+                        }
+
+                        if (data.done && data.prompt_eval_count && data.eval_count) {
+                            tokensUsed = data.prompt_eval_count + data.eval_count;
+                        }
+                    } catch (parseError) {
+                        console.log('Parse error in line:', line, 'Error:', parseError.message);
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+
+        const endTime = process.hrtime.bigint();
+        durationMs = Number(endTime - startTime) / 1_000_000;
+
+        // Finale Nachricht mit Websearch-Ergebnissen speichern
+        currentChat.messages.push({
+            id: uuidv4(),
+            sender: 'ai',
+            content: aiFullResponse,
+            tokens: tokensUsed,
+            time: (durationMs / 1000).toFixed(2),
+            websearchResults: { quellen }
+        });
+        
+        user['used-tokens'] = (user['used-tokens'] || 0) + tokensUsed;
+        stats.overallStats.totalTokensUsed = (stats.overallStats.totalTokensUsed || 0) + tokensUsed;
+        const today = new Date().toISOString().slice(0, 10);
+        if (!stats.dailyStats[today]) {
+            stats.dailyStats[today] = { totalTokensUsed: 0 };
+        }
+        stats.dailyStats[today].totalTokensUsed += tokensUsed;
+
+        saveData(CHATS_PATH, chats);
+        saveData(USERS_PATH, users);
+        saveData(STATS_PATH, stats);
+
+        res.write(JSON.stringify({ 
+            type: 'end', 
+            tokens: tokensUsed, 
+            time: (durationMs / 1000).toFixed(2), 
+            chatId: chatId,
+            isNewChat: isNewChat
+        }) + '\n');
+        
+        res.end();
+
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            if (!res.headersSent) {
+                return res.status(499).json({ 
+                    type: 'aborted', 
+                    message: 'Generation abgebrochen' 
+                });
+            }
+        } else {
+            console.error('Websearch error:', error);
+            if (!res.headersSent) {
+                res.status(500).json({ 
+                    type: 'error', 
+                    message: error.message || 'Interner Serverfehler',
+                    code: error.code 
+                });
+            } else {
+                res.write(JSON.stringify({ 
+                    type: 'error', 
+                    message: error.message || 'Interner Serverfehler',
+                    code: error.code 
+                }) + '\n');
+                res.end();
+            }
+        }
+    } finally {
+        if (abortController) {
+            userGenerationControllers.delete(req.userId);
+        }
+        // Temporäre Nachricht entfernen, wenn currentChat definiert ist
+        if (currentChat) {
+            currentChat.messages = currentChat.messages.filter(msg => msg.id !== currentMessageId);
+            saveData(CHATS_PATH, chats);
+        }
+    }
+});
+
+// Deepsearch-Endpunkt
+app.post('/api/deepsearch', authenticateUser, async (req, res) => {
+    let aiFullResponse = '';
+    let tokensUsed = 0;
+    let durationMs = 0;
+    let abortController = null;
+    const currentMessageId = `temp_${uuidv4()}`; // Temporäre ID für den Loading-Status
+    let currentChat = null; // Initialisiere currentChat hier
+
+    try {
+        const { message, model } = req.body;
+        let chatId = req.headers['x-chat-id'] || null;
+        const user = users.users.find(u => u.id === req.userId);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const maxTokens = user['max-tokens'] === '--' ? Infinity : parseInt(user['max-tokens']);
+        if (user['used-tokens'] >= maxTokens) {
+            return res.status(403).json({ message: 'Daily token limit reached.' });
+        }
+
+        currentChat = chats.chats.find(c => c.id === chatId && c.user_id === req.userId);
+        let isNewChat = false;
+        
+        if (!currentChat) {
+            chatId = uuidv4();
+            currentChat = {
+                id: chatId,
+                user_id: user.id,
+                title: message.substring(0, 15) + (message.length > 15 ? '...' : ''),
+                messages: [],
+                createdAt: new Date().toISOString()
+            };
+            chats.chats.push(currentChat);
+            isNewChat = true;
+        }
+
+        currentChat.messages.push({
+            id: uuidv4(),
+            sender: 'user',
+            content: message
+        });
+        saveData(CHATS_PATH, chats);
+
+        abortController = new AbortController();
+        userGenerationControllers.set(req.userId, abortController);
+
+        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaPort = config.ollama.port;
+        const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
+
+        // Custom System-Prompt für Deepsearch: Generiere nur 1 Stichwort
+        const deepsearchPrompt = `Du bist ein Stichwort-Extraktor für Deepsearch. Basierend auf der Eingabe des Nutzers, extrahiere genau ein zentrales Stichwort und generiere ein JSON-Objekt mit diesem Stichwort und dem verwendeten Modell. Die Ausgabe muss exakt diesem Format entsprechen und darf nur das JSON-Objekt enthalten, ohne zusätzlichen Text oder Erklärungen:
+{
+    "stichwort": "zentralesStichwort",
+    "model": "${ollamaModel}"
+}
+Beispiel für die Eingabe "Gebe mir Infos über die neuesten KIs die es gibt":
+{
+    "stichwort": "neueste KI",
+    "model": "${ollamaModel}"
+}
+Nutzer-Eingabe: ${message}`;
+
+        const ollamaMessages = [
+            { role: 'system', content: deepsearchPrompt },
+            { role: 'user', content: message }
+        ];
+
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        });
+
+        // Temporäre Nachricht für Deepsearch-Loading hinzufügen
+        currentChat.messages.push({
+            id: currentMessageId,
+            sender: 'ai',
+            content: 'Deepsearch läuft...',
+            isDeepsearchPending: true
+        });
+        saveData(CHATS_PATH, chats);
+
+        const startTime = process.hrtime.bigint();
+
+        // Schritt 1: Stichwort von Ollama generieren
+        const keywordResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: ollamaMessages,
+                stream: false
+            }),
+            signal: abortController.signal
+        });
+
+        if (!keywordResponse.ok) {
+            const errorText = await keywordResponse.text();
+            throw new Error(`Ollama API error: ${keywordResponse.status} - ${errorText}`);
+        }
+
+        const keywordData = await keywordResponse.json();
+        let keywordTerms;
+        try {
+            if (!keywordData.message || !keywordData.message.content) {
+                throw new Error('Ollama response is empty or missing message content');
+            }
+            console.log('Ollama keyword response (raw):', keywordData.message.content); // Debugging-Log
+
+            // Markdown-Markierungen entfernen
+            let cleanedResponse = keywordData.message.content
+                .replace(/```json\n|\n```/g, '') // Entfernt ```json und ```
+                .replace(/```/g, '') // Entfernt verbleibende ```
+                .trim();
+            console.log('Cleaned Ollama keyword response:', cleanedResponse); // Debugging-Log
+
+            keywordTerms = JSON.parse(cleanedResponse);
+            if (!keywordTerms.stichwort || typeof keywordTerms.stichwort !== 'string' || !keywordTerms.model) {
+                throw new Error('Ollama response does not match expected format: Must contain exactly 1 keyword and a model');
+            }
+        } catch (e) {
+            console.error('Invalid keyword format from Ollama:', e.message, 'Response:', keywordData.message?.content || 'No content');
+            throw new Error(`Invalid keyword format from Ollama: ${e.message}`);
+        }
+
+        console.log('Final keyword sent to Deepsearch API:', keywordTerms); // Debugging-Log
+
+        // Schritt 2: Stichwort an localhost:6456 senden
+        const deepsearchResponse = await fetch('http://localhost:6456', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(keywordTerms),
+            signal: abortController.signal
+        });
+
+        if (!deepsearchResponse.ok) {
+            const errorText = await deepsearchResponse.text();
+            throw new Error(`Deepsearch API error: ${deepsearchResponse.status} - ${errorText}`);
+        }
+
+        const deepsearchResult = await deepsearchResponse.json();
+        const { zusammenfassung, quellen } = deepsearchResult;
+
+        console.log('Deepsearch result quellen:', quellen); // Debugging-Log für Quellen
+
+        // Temporäre Nachricht entfernen
+        currentChat.messages = currentChat.messages.filter(msg => msg.id !== currentMessageId);
+        saveData(CHATS_PATH, chats);
+
+        // Schritt 3: Finale AI-Antwort mit normalem System-Prompt generieren
+        const systemPrompt = config['system-prompt']
+            .replace('%user-prompt%', user.profile['personal-ai-prompt'] || '')
+            .replace('%user-name%', user.firstName || 'User')
+            .replace('%user-location%', user.profile.location || 'unbekannt')
+            .replace('%model%', ollamaModel)
+            .replace('%sprache%', config.sprache)
+            .replace('%time%', new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
+
+        const finalMessages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `${message}\n\nDeepsearch Zusammenfassung: ${zusammenfassung}` }
+        ];
+
+        const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: finalMessages,
+                stream: true
+            }),
+            signal: abortController.signal
+        });
+
+        if (!ollamaResponse.ok) {
+            const errorText = await ollamaResponse.text();
+            throw new Error(`Ollama API error: ${ollamaResponse.status} - ${errorText}`);
+        }
+
+        const reader = ollamaResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+            // Deepsearch-Ergebnisse (Quellen) sofort senden
+            res.write(JSON.stringify({
+                type: 'deepsearch',
+                deepsearchResults: { quellen }
+            }) + '\n');
+            if (typeof res.flush === 'function') res.flush();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+                    
+                    try {
+                        const data = JSON.parse(line);
+                        
+                        if (data.message && data.message.content) {
+                            aiFullResponse += data.message.content;
+                            res.write(JSON.stringify({
+                                type: 'token',
+                                token: data.message.content,
+                                done: data.done || false
+                            }) + '\n');
+                            if (typeof res.flush === 'function') res.flush();
+                        }
+
+                        if (data.done && data.prompt_eval_count && data.eval_count) {
+                            tokensUsed = data.prompt_eval_count + data.eval_count;
+                        }
+                    } catch (parseError) {
+                        console.log('Parse error in line:', line, 'Error:', parseError.message);
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+
+        const endTime = process.hrtime.bigint();
+        durationMs = Number(endTime - startTime) / 1_000_000;
+
+        // Finale Nachricht mit Deepsearch-Ergebnissen speichern
+        currentChat.messages.push({
+            id: uuidv4(),
+            sender: 'ai',
+            content: aiFullResponse,
+            tokens: tokensUsed,
+            time: (durationMs / 1000).toFixed(2),
+            deepsearchResults: { quellen }
+        });
+        
+        user['used-tokens'] = (user['used-tokens'] || 0) + tokensUsed;
+        stats.overallStats.totalTokensUsed = (stats.overallStats.totalTokensUsed || 0) + tokensUsed;
+        const today = new Date().toISOString().slice(0, 10);
+        if (!stats.dailyStats[today]) {
+            stats.dailyStats[today] = { totalTokensUsed: 0 };
+        }
+        stats.dailyStats[today].totalTokensUsed += tokensUsed;
+
+        saveData(CHATS_PATH, chats);
+        saveData(USERS_PATH, users);
+        saveData(STATS_PATH, stats);
+
+        res.write(JSON.stringify({ 
+            type: 'end', 
+            tokens: tokensUsed, 
+            time: (durationMs / 1000).toFixed(2), 
+            chatId: chatId,
+            isNewChat: isNewChat
+        }) + '\n');
+        
+        res.end();
+
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            if (!res.headersSent) {
+                return res.status(499).json({ 
+                    type: 'aborted', 
+                    message: 'Generation abgebrochen' 
+                });
+            }
+        } else {
+            console.error('Deepsearch error:', error);
+            if (!res.headersSent) {
+                res.status(500).json({ 
+                    type: 'error', 
+                    message: error.message || 'Interner Serverfehler',
+                    code: error.code 
+                });
+            } else {
+                res.write(JSON.stringify({ 
+                    type: 'error', 
+                    message: error.message || 'Interner Serverfehler',
+                    code: error.code 
+                }) + '\n');
+                res.end();
+            }
+        }
+    } finally {
+        if (abortController) {
+            userGenerationControllers.delete(req.userId);
+        }
+        // Temporäre Nachricht entfernen, wenn currentChat definiert ist
+        if (currentChat) {
+            currentChat.messages = currentChat.messages.filter(msg => msg.id !== currentMessageId);
+            saveData(CHATS_PATH, chats);
+        }
+    }
+});
+
 app.post('/api/chats/:id/rename', authenticateUser, (req, res) => {
     const chatId = req.params.id;
     let { title } = req.body;
