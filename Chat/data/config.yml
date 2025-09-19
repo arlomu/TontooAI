@@ -56,4 +56,3 @@ smtp:
   auth:
     user: nextcloud@ogobogo.de
     pass: wPE30M4r2rvqp12Fm9lW
-message-guard-enabled: false

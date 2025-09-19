@@ -1,6 +1,7 @@
 {
   "gemma3:1b": "Gemma 1B",
   "gemma3:4b": "Gemma 4B",
+  "gemma3:12b": "Gemma 12B",
   "gemma3:270m": "Gemma 270M",
   "qwen2.5-coder:1.5b": "Qwen Coder 1.5B",
   "qwen2.5-coder:3b": "Qwen Coder 3B",
