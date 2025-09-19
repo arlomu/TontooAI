@@ -6,3 +6,5 @@ Chat/ssl/cert.pem
 Chat/ssl/key.pem
 Web-search/node_modules/*
 Deep-search/node_modules/*
+Code-interpreter/node_modules/*
+Code-interpreter/code/*

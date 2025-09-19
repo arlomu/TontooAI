@@ -18,7 +18,7 @@ const axiosWithTimeout = async (url, options, timeoutMs = 30000) => {
     return response;
   } catch (error) {
     clearTimeout(timeout);
-    throw error;
+    throw new Error(`Axios error: ${error.message}`);
   }
 };
 
@@ -32,7 +32,7 @@ const queryOllama = (model, prompt, timeoutMs = 60000) => {
 
     const timeout = setTimeout(() => {
       ollama.kill();
-      reject(new Error("Ollama-Anfrage hat das Zeitlimit überschritten"));
+      reject(new Error(`Ollama timeout after ${timeoutMs}ms`));
     }, timeoutMs);
 
     ollama.stdout.on("data", (data) => {
@@ -46,12 +46,12 @@ const queryOllama = (model, prompt, timeoutMs = 60000) => {
 
     ollama.on("error", (err) => {
       clearTimeout(timeout);
-      reject(err);
+      reject(new Error(`Ollama process error: ${err.message}`));
     });
   });
 };
 
-// --- DuckDuckGo Suche (Titel + URL + Snippet) ---
+// DuckDuckGo Suche (Titel + URL + Snippet)
 async function searchDuckDuckGo(query, limit = 5) {
   try {
     const res = await axiosWithTimeout(
@@ -80,14 +80,15 @@ async function searchDuckDuckGo(query, limit = 5) {
       }
     });
 
+    console.log(`DuckDuckGo search for "${query}" returned ${results.length} results`);
     return results;
   } catch (error) {
-    console.error(`Fehler bei DuckDuckGo-Suche für "${query}":`, error.message);
+    console.error(`DuckDuckGo search error for "${query}": ${error.message}`);
     return [];
   }
 }
 
-// --- Endpoint ---
+// Endpoint
 app.post("/", async (req, res) => {
   try {
     const { stichwort, model } = req.body;
@@ -95,9 +96,11 @@ app.post("/", async (req, res) => {
       return res.status(400).json({ error: "Stichwort und Modell müssen angegeben werden." });
     }
 
+    console.log(`Processing DeepSearch request for stichwort: "${stichwort}", model: "${model}"`);
+
     // 1. Ollama: 10 verwandte Suchbegriffe generieren
     const promptKeywords = `
-Erstelle 10 verwandte Suchbegriffe zu: "${stichwort}". Konzentriere dich auf Begriffe, die thematisch eng mit "${stichwort}" verbunden sind (z. B. für "Erdbeerkuchen" Begriffe wie "Erdbeer-Torte", "Backrezept Erdbeeren", "Erdbeerkuchen Rezept"). 
+Erstelle 10 verwandte Suchbegriffe zu: "${stichwort}". Konzentriere dich auf Begriffe, die thematisch eng mit "${stichwort}" verbunden sind. 
 Antworte nur als JSON-Array von Strings, ohne Markdown oder zusätzlichen Text.
 `;
     let keywordsRaw;
@@ -105,33 +108,32 @@ Antworte nur als JSON-Array von Strings, ohne Markdown oder zusätzlichen Text.
       keywordsRaw = await queryOllama(model, promptKeywords, 60000);
       console.log("Ollama keywords response (raw):", keywordsRaw);
     } catch (error) {
-      console.error("Fehler bei Ollama-Keyword-Generierung:", error.message);
+      console.error("Ollama keyword generation error:", error.message);
       return res.status(500).json({ error: "Fehler bei der Keyword-Generierung", details: error.message });
     }
 
     let keywords;
     try {
-      // Markdown-Markierungen entfernen
       const cleanedKeywords = keywordsRaw
-        .replace(/```json\n|\n```/g, '')
+        .replace(/```json/g, '') // Korrigierter regulärer Ausdruck
         .replace(/```/g, '')
         .trim();
       console.log("Cleaned keywords:", cleanedKeywords);
       keywords = JSON.parse(cleanedKeywords);
       if (!Array.isArray(keywords)) {
-        throw new Error("Keywords sind kein Array");
+        throw new Error("Keywords are not an array");
       }
-    } catch {
+    } catch (error) {
+      console.error("Keyword parsing error:", error.message);
       keywords = keywordsRaw.split(/\r?\n|,/).map(k => k.trim()).filter(k => k).slice(0, 10);
       console.log("Fallback keywords:", keywords);
     }
 
-    // 2. Suche: für jedes Keyword die DuckDuckGo Ergebnisse
-    const allResults = [];
-    for (const word of keywords) {
-      const results = await searchDuckDuckGo(word, 5);
-      allResults.push(...results);
-    }
+    // 2. Suche: Parallele DuckDuckGo-Suchen
+    console.log("Starting parallel DuckDuckGo searches...");
+    const searchPromises = keywords.map(word => searchDuckDuckGo(word, 5));
+    const allResults = (await Promise.all(searchPromises)).flat();
+    console.log(`Total DuckDuckGo results: ${allResults.length}`);
 
     // 3. In 3 Blöcke à 5 Ergebnisse teilen
     const blocks = [];
@@ -139,11 +141,13 @@ Antworte nur als JSON-Array von Strings, ohne Markdown oder zusätzlichen Text.
       blocks.push(allResults.slice(i * 5, i * 5 + 5));
     }
 
-    // 4. Ollama: jede 5er-Gruppe zusammenfassen
+    // 4. Ollama: Jede 5er-Gruppe zusammenfassen
     const blockSummaries = [];
-    for (const block of blocks) {
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
       if (block.length === 0) {
         blockSummaries.push("Keine Ergebnisse für diesen Block verfügbar.");
+        console.log(`Block ${i + 1}: No results available`);
         continue;
       }
       const promptBlock = `
@@ -154,12 +158,11 @@ ${block.map(r => `Titel: ${r.title}\nURL: ${r.url}\nBeschreibung: ${r.desc}`).jo
 Antworte NUR mit Text in Deutsch, ohne Markdown oder zusätzlichen Text.
 `;
       try {
-        const summary = await queryOllama(model, promptBlock, 120000); // 120 Sekunden Timeout
-        console.log(`Block-Zusammenfassung ${blockSummaries.length + 1}:`, summary);
+        const summary = await queryOllama(model, promptBlock, 120000);
+        console.log(`Block ${i + 1} summary:`, summary);
         blockSummaries.push(summary || "Keine Zusammenfassung verfügbar.");
       } catch (error) {
-        console.error(`Fehler bei Block-Zusammenfassung ${blockSummaries.length + 1}:`, error.message);
-        // Fallback: Rohe Suchergebnisse zusammenfassen
+        console.error(`Block ${i + 1} summary error: ${error.message}`);
         const fallbackSummary = block
           .map(r => `${r.title}: ${r.desc}`)
           .join("\n")
@@ -182,11 +185,10 @@ Antworte NUR mit einem JSON-Objekt, ohne Markdown oder zusätzlichen Text:
 `;
     let finalSummary;
     try {
-      finalSummary = await queryOllama(model, finalPrompt, 300000); // 5 Minuten Timeout
+      finalSummary = await queryOllama(model, finalPrompt, 300000);
       console.log("Ollama final summary response (raw):", finalSummary);
     } catch (error) {
-      console.error("Fehler bei finaler Zusammenfassung:", error.message);
-      // Fallback: Kombinierte Blocks ohne erneute Zusammenfassung
+      console.error("Final summary error:", error.message);
       const fallbackSummary = blockSummaries.join("\n\n") || "Keine Zusammenfassung verfügbar.";
       return res.json({
         zusammenfassung: fallbackSummary,
@@ -194,31 +196,35 @@ Antworte NUR mit einem JSON-Objekt, ohne Markdown oder zusätzlichen Text:
       });
     }
 
-    // Versuch JSON zu parsen
+    // JSON parsen
     let jsonResponse;
     try {
-      // Markdown-Markierungen entfernen
       const cleanedSummary = finalSummary
-        .replace(/```json\n|\n```/g, '')
+        .replace(/```json/g, '') // Korrigierter regulärer Ausdruck
         .replace(/```/g, '')
         .trim();
       console.log("Cleaned final summary:", cleanedSummary);
       jsonResponse = JSON.parse(cleanedSummary);
       if (!jsonResponse.zusammenfassung || !Array.isArray(jsonResponse.quellen)) {
-        throw new Error("Ungültiges JSON-Format: zusammenfassung oder quellen fehlen");
+        throw new Error("Invalid JSON format: zusammenfassung or quellen missing");
       }
       jsonResponse.quellen = jsonResponse.quellen.filter(url => url && typeof url === "string" && url.startsWith("http"));
     } catch (error) {
-      console.error("Fehler beim Parsen der finalen Zusammenfassung:", error.message);
+      console.error("Final summary parsing error:", error.message);
       jsonResponse = {
         zusammenfassung: blockSummaries.join("\n\n") || "Keine Zusammenfassung verfügbar.",
         quellen: allResults.map(r => r.url).filter(url => url && typeof url === "string" && url.startsWith("http"))
       };
     }
 
+    console.log("Sending response to client...");
     res.json(jsonResponse);
   } catch (err) {
-    console.error("DeepSearch Fehler:", err);
+    console.error("DeepSearch error:", {
+      message: err.message,
+      stack: err.stack,
+      name: err.name
+    });
     res.status(500).json({ error: "Interner Fehler", details: err.message });
   }
 });

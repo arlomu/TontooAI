@@ -325,6 +325,11 @@ app.post('/api/stop', authenticateUser, async (req, res) => {
             message: 'Fehler beim Stoppen der Generation',
             error: error.message 
         });
+    } finally {
+        // Verwende req.userId statt userId
+        if (req.userId && userGenerationControllers.has(req.userId)) {
+            userGenerationControllers.delete(req.userId);
+        }
     }
 });
 
@@ -962,10 +967,16 @@ app.post('/api/deepsearch', authenticateUser, async (req, res) => {
     let tokensUsed = 0;
     let durationMs = 0;
     let abortController = null;
-    const currentMessageId = `temp_${uuidv4()}`; // Temporäre ID für den Loading-Status
+    const currentMessageId = `temp_${uuidv4()}`;
     let currentChat = null;
+    let keepAliveInterval = null;
 
     try {
+        // Erhöhe Timeout für Response und Connection
+        res.setTimeout(600000); // 10 Minuten
+        req.socket.setTimeout(600000);
+        res.connection.setTimeout(600000);
+
         const { message, model } = req.body;
         let chatId = req.headers['x-chat-id'] || null;
         const user = users.users.find(u => u.id === req.userId);
@@ -1009,7 +1020,40 @@ app.post('/api/deepsearch', authenticateUser, async (req, res) => {
         const ollamaPort = config.ollama.port;
         const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
 
-        // Custom System-Prompt für Deepsearch: Generiere nur 1 Stichwort
+        res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8', // Geändert zu text/plain für besseres Streaming
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        });
+
+        // Sofortige Startnachricht senden
+        const startPayload = { type: 'progress', message: 'DeepSearch wird gestartet...', done: false };
+        console.log('Sending start payload:', startPayload); // Debug
+        res.write(JSON.stringify(startPayload) + '\n');
+        res.flush?.();
+
+        // Temporäre Nachricht hinzufügen
+        currentChat.messages.push({
+            id: currentMessageId,
+            sender: 'ai',
+            content: 'Deepsearch läuft...',
+            isDeepsearchPending: true
+        });
+        saveData(CHATS_PATH, chats);
+
+        // Keep-Alive: Alle 30 Sekunden (reduziert für weniger Overhead)
+        keepAliveInterval = setInterval(() => {
+            const keepAlivePayload = { type: 'progress', message: 'DeepSearch läuft, bitte warten...', done: false };
+            console.log('Sending keep-alive:', keepAlivePayload); // Debug
+            res.write(JSON.stringify(keepAlivePayload) + '\n');
+            res.flush?.();
+        }, 30000);
+
+        const startTime = process.hrtime.bigint();
+
+        // Schritt 1: Stichwort generieren (unverändert, aber mit Log)
         const deepsearchPrompt = `Du bist ein Stichwort-Extraktor für Deepsearch. Basierend auf der Eingabe des Nutzers, extrahiere genau ein zentrales Stichwort und generiere ein JSON-Objekt mit diesem Stichwort und dem verwendeten Modell. Die Ausgabe muss exakt diesem Format entsprechen und darf nur das JSON-Objekt enthalten, ohne zusätzlichen Text oder Erklärungen:
 {
     "stichwort": "zentralesStichwort",
@@ -1027,25 +1071,7 @@ Nutzer-Eingabe: ${message}`;
             { role: 'user', content: message }
         ];
 
-        res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Transfer-Encoding': 'chunked',
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no'
-        });
-
-        // Temporäre Nachricht für Deepsearch-Loading hinzufügen
-        currentChat.messages.push({
-            id: currentMessageId,
-            sender: 'ai',
-            content: 'Deepsearch läuft...',
-            isDeepsearchPending: true
-        });
-        saveData(CHATS_PATH, chats);
-
-        const startTime = process.hrtime.bigint();
-
-        // Schritt 1: Stichwort von Ollama generieren
+        console.log('Starte Ollama Keyword-Generierung...');
         const keywordResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1070,7 +1096,6 @@ Nutzer-Eingabe: ${message}`;
             }
             console.log('Ollama keyword response (raw):', keywordData.message.content);
 
-            // Markdown-Markierungen entfernen
             let cleanedResponse = keywordData.message.content
                 .replace(/```json\n|\n```/g, '')
                 .replace(/```/g, '')
@@ -1087,8 +1112,9 @@ Nutzer-Eingabe: ${message}`;
         }
 
         console.log('Final keyword sent to Deepsearch API:', keywordTerms);
+        console.log('Starte DeepSearch API-Aufruf...');
 
-        // Schritt 2: Stichwort an localhost:6456 senden (ohne Timeout)
+        // Schritt 2: DeepSearch API aufrufen
         const deepsearchResponse = await fetch('http://localhost:6456', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1110,12 +1136,16 @@ Nutzer-Eingabe: ${message}`;
         }
         quellen = quellen ? quellen.filter(url => url && typeof url === 'string' && url.startsWith('http')) : [];
         console.log('Deepsearch result quellen (nach Filter):', quellen);
+        console.log('DeepSearch API-Aufruf abgeschlossen.');
+
+        // Keep-Alive stoppen
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
 
         // Temporäre Nachricht entfernen
         currentChat.messages = currentChat.messages.filter(msg => msg.id !== currentMessageId);
         saveData(CHATS_PATH, chats);
 
-        // Schritt 3: Finale AI-Antwort mit normalem System-Prompt generieren
+        // Schritt 3: Finale AI-Antwort generieren
         const systemPrompt = config['system-prompt']
             .replace('%user-prompt%', user.profile['personal-ai-prompt'] || '')
             .replace('%user-name%', user.firstName || 'User')
@@ -1129,6 +1159,7 @@ Nutzer-Eingabe: ${message}`;
             { role: 'user', content: `${message}\n\nDeepsearch Zusammenfassung: ${zusammenfassung}` }
         ];
 
+        console.log('Starte finale Ollama-Generierung...');
         const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1145,47 +1176,55 @@ Nutzer-Eingabe: ${message}`;
             throw new Error(`Zweite Ollama API-Anfrage fehlgeschlagen: ${ollamaResponse.status} - ${errorText}`);
         }
 
+        // Deepsearch-Ergebnisse senden
+        const deepsearchPayload = { type: 'deepsearch', deepsearchResults: { quellen } };
+        console.log('Sending deepsearch payload:', deepsearchPayload);
+        res.write(JSON.stringify(deepsearchPayload) + '\n');
+        res.flush?.();
+
         const reader = ollamaResponse.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
 
         try {
-            // Deepsearch-Ergebnisse (Quellen) sofort senden
-            res.write(JSON.stringify({
-                type: 'deepsearch',
-                deepsearchResults: { quellen }
-            }) + '\n');
-            if (typeof res.flush === 'function') res.flush();
-
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
+
+                if (!value || value.length === 0) {
+                    console.warn('Leerer Chunk erhalten, überspringe...');
+                    continue;
+                }
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.trim() === '') continue;
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine) continue;
                     
                     try {
-                        const data = JSON.parse(line);
-                        
+                        const data = JSON.parse(trimmedLine);
+                        console.log('Parsed Ollama line:', data); // Debug
+
                         if (data.message && data.message.content) {
                             aiFullResponse += data.message.content;
-                            res.write(JSON.stringify({
+                            const tokenPayload = {
                                 type: 'token',
                                 token: data.message.content,
                                 done: data.done || false
-                            }) + '\n');
-                            if (typeof res.flush === 'function') res.flush();
+                            };
+                            console.log('Sending token payload:', tokenPayload);
+                            res.write(JSON.stringify(tokenPayload) + '\n');
+                            res.flush?.();
                         }
 
                         if (data.done && data.prompt_eval_count && data.eval_count) {
                             tokensUsed = data.prompt_eval_count + data.eval_count;
                         }
                     } catch (parseError) {
-                        console.log('Parse error in line:', line, 'Error:', parseError.message);
+                        console.error('Parse error in Ollama line:', line, 'Error:', parseError.message);
                     }
                 }
             }
@@ -1196,7 +1235,7 @@ Nutzer-Eingabe: ${message}`;
         const endTime = process.hrtime.bigint();
         durationMs = Number(endTime - startTime) / 1_000_000;
 
-        // Finale Nachricht mit Deepsearch-Ergebnissen speichern
+        // Finale Nachricht speichern (unverändert)
         currentChat.messages.push({
             id: uuidv4(),
             sender: 'ai',
@@ -1218,42 +1257,46 @@ Nutzer-Eingabe: ${message}`;
         saveData(USERS_PATH, users);
         saveData(STATS_PATH, stats);
 
-        res.write(JSON.stringify({ 
+        const endPayload = { 
             type: 'end', 
             tokens: tokensUsed, 
             time: (durationMs / 1000).toFixed(2), 
             chatId: chatId,
             isNewChat: isNewChat
-        }) + '\n');
-        
+        };
+        console.log('Sending end payload:', endPayload);
+        res.write(JSON.stringify(endPayload) + '\n');
         res.end();
 
     } catch (error) {
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
         if (error.name === 'AbortError') {
+            console.log('Request aborted by user');
             if (!res.headersSent) {
                 return res.status(499).json({ 
                     type: 'aborted', 
                     message: 'Generation abgebrochen' 
                 });
+            } else {
+                res.write(JSON.stringify({ type: 'aborted', message: 'Generation abgebrochen' }) + '\n');
+                res.end();
             }
         } else {
-            console.error('Deepsearch error:', error);
+            console.error('Deepsearch error:', error.name, error.message, error.stack);
+            const errorPayload = { 
+                type: 'error', 
+                message: error.message || 'Interner Serverfehler',
+                code: error.code 
+            };
             if (!res.headersSent) {
-                res.status(500).json({ 
-                    type: 'error', 
-                    message: error.message || 'Interner Serverfehler',
-                    code: error.code 
-                });
+                res.status(500).json(errorPayload);
             } else {
-                res.write(JSON.stringify({ 
-                    type: 'error', 
-                    message: error.message || 'Interner Serverfehler',
-                    code: error.code 
-                }) + '\n');
+                res.write(JSON.stringify(errorPayload) + '\n');
                 res.end();
             }
         }
     } finally {
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
         if (abortController) {
             userGenerationControllers.delete(req.userId);
         }
@@ -1264,22 +1307,439 @@ Nutzer-Eingabe: ${message}`;
     }
 });
 
-app.post('/api/chats/:id/rename', authenticateUser, (req, res) => {
-    const chatId = req.params.id;
-    let { title } = req.body;
-    title = title.substring(0, 15) + (title.length > 15 ? '...' : '');
+// Neue Route für Code Interpreter (zu deinem Server hinzufügen)
+app.post('/api/codeinterpreter', authenticateUser, async (req, res) => {
+    let aiResponseContent = '';
+    let totalTokens = 0;
+    let duration = 0;
+    let abortController = null;
+    const currentMessageId = `temp_${uuidv4()}`; // Temporäre ID für Ladeanimation
+    let currentChat = null; // Initialisiere currentChat hier
 
-    if (!chats.chats) chats.chats = [];
-    
-    const chatIndex = chats.chats.findIndex(c => c.id === chatId && c.user_id === req.userId);
-    if (chatIndex !== -1) {
-        chats.chats[chatIndex].title = title;
+    try {
+        const { message, model } = req.body;
+        const userId = req.userId;
+        const chatId = req.headers['x-chat-id'] || null;
+
+        const user = users.users.find(u => u.id === userId);
+        if (!user) {
+            return res.status(404).json({ 
+                type: 'error', 
+                message: 'Benutzer nicht gefunden.' 
+            });
+        }
+
+        const maxTokens = user['max-tokens'] === '--' ? Infinity : parseInt(user['max-tokens']);
+        if (user['used-tokens'] >= maxTokens) {
+            return res.status(403).json({ 
+                type: 'error', 
+                message: 'Daily token limit reached.' 
+            });
+        }
+
+        // Chat erstellen oder verwenden
+        currentChat = chats.chats.find(c => c.id === chatId && c.user_id === userId);
+        let isNewChat = false;
+
+        if (!currentChat) {
+            const title = message.length > 50 ? message.substring(0, 50) + '...' : message;
+            currentChat = {
+                id: uuidv4(),
+                user_id: userId,
+                title: title,
+                messages: [],
+                createdAt: new Date().toISOString()
+            };
+            chats.chats.push(currentChat);
+            isNewChat = true;
+        }
+
+        // User-Nachricht speichern
+        const userMessage = {
+            id: uuidv4(),
+            sender: 'user',
+            content: message
+        };
+        currentChat.messages.push(userMessage);
         saveData(CHATS_PATH, chats);
-        res.json({ message: 'Chat renamed successfully.' });
-    } else {
-        res.status(404).json({ message: 'Chat not found.' });
+
+        // Temporäre Nachricht für Codeausführung hinzufügen
+        currentChat.messages.push({
+            id: currentMessageId,
+            sender: 'ai',
+            content: 'Code wird ausgeführt...',
+            isCodeExecutionPending: true
+        });
+        saveData(CHATS_PATH, chats);
+
+        // Response headers für streaming
+        res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        });
+
+        // Progress-Nachricht senden
+        res.write(JSON.stringify({ 
+            type: 'progress', 
+            message: 'Code-Interpreter wird gestartet...' 
+        }) + '\n');
+        if (typeof res.flush === 'function') res.flush();
+
+        // AbortController für diese Generation erstellen
+        abortController = new AbortController();
+        userGenerationControllers.set(userId, abortController);
+
+        const startTime = Date.now();
+
+        // Custom System Prompt für Code Interpreter
+        const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
+        const codeInterpreterPrompt = `Du bist ein Code-Interpreter-Assistent. Analysiere die Benutzeranfrage und Führe den Code aus
+
+antworte AUSSCHLIESSLICH mit einem JSON-Objekt in folgendem Format:
+\`\`\`json
+{
+    "execute": true,
+    "code": "print('Hello World')",
+    "language": "python",
+    "internet": "false",
+    "packages": ["requests", "numpy"],
+    "version": "3",
+    "description": "Kurze Beschreibung was der Code macht"
+}
+\`\`\`
+
+Unterstützte Sprachen: "python", "nodejs"
+Internet: "true" oder "false" (standardmäßig "false")
+Version: Bei Python "3", bei Node.js die gewünschte Version
+
+Benutzeranfrage: ${message}`;
+
+        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaPort = config.ollama.port;
+
+        // KI-Anfrage mit Custom Prompt (non-streaming für JSON)
+        const aiResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: [{ role: 'system', content: codeInterpreterPrompt }],
+                stream: false
+            }),
+            signal: abortController.signal
+        });
+
+        if (!aiResponse.ok) {
+            const errorText = await aiResponse.text();
+            throw new Error(`Ollama API error: ${aiResponse.status} - ${errorText}`);
+        }
+
+        const aiData = await aiResponse.json();
+        if (!aiData.message || !aiData.message.content) {
+            throw new Error('Ollama response is empty or missing message content');
+        }
+
+        // JSON aus der Antwort extrahieren
+        let codeExecutionData = null;
+        const jsonMatch = aiData.message.content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+        if (jsonMatch) {
+            try {
+                codeExecutionData = JSON.parse(jsonMatch[1]);
+                if (!codeExecutionData.execute || !codeExecutionData.code || !codeExecutionData.language) {
+                    throw new Error('Invalid code execution format: Must contain execute, code, and language');
+                }
+            } catch (parseError) {
+                console.error('JSON Parse Error:', parseError.message, 'Content:', aiData.message.content);
+                throw new Error('Fehler beim Parsen der Code-Interpreter-Antwort');
+            }
+        } else {
+            throw new Error('No valid JSON code execution data found in AI response');
+        }
+
+        console.log('Code Execution Data:', codeExecutionData); // Debug
+
+        // Code ausführen
+        res.write(JSON.stringify({ 
+            type: 'progress', 
+            message: `Führe ${codeExecutionData.language} Code aus...` 
+        }) + '\n');
+        if (typeof res.flush === 'function') res.flush();
+
+        const codeResult = await executeCode({
+            code: codeExecutionData.code,
+            language: codeExecutionData.language,
+            internet: codeExecutionData.internet || 'false',
+            packages: codeExecutionData.packages || [],
+            version: codeExecutionData.version || '3'
+        });
+
+        console.log('Code Execution Result:', codeResult); // Debug
+
+        // Validierung und Bereinigung
+        const validatedCodeResult = {
+            code: codeExecutionData.code,
+            language: codeExecutionData.language,
+            packages: Array.isArray(codeExecutionData.packages) ? codeExecutionData.packages : [],
+            version: codeExecutionData.version || '3',
+            internet: codeExecutionData.internet || 'false',
+            description: codeExecutionData.description || 'Keine Beschreibung verfügbar',
+            status: codeResult.status || 'error',
+            output: codeResult.output || null,
+            error: codeResult.status === 'error' ? (codeResult.message || 'Unbekannter Fehler') : null
+        };
+
+        // Code Execution Ergebnisse senden
+        res.write(JSON.stringify({
+            type: 'codeexecution',
+            codeExecutionResults: validatedCodeResult
+        }) + '\n');
+        if (typeof res.flush === 'function') res.flush();
+
+        // Zweite KI-Anfrage für die Interpretation
+        const interpretationPrompt = `Hier ist das Ergebnis der Code-Ausführung:
+
+Code: ${codeExecutionData.code}
+Sprache: ${codeExecutionData.language}
+Status: ${codeResult.status}
+${codeResult.output ? `Ausgabe: ${codeResult.output}` : `Fehler: ${codeResult.message || 'Unbekannter Fehler'}`}
+
+Erkläre dem Benutzer das Ergebnis auf eine verständliche Art. Sei hilfreich und erkläre, was der Code gemacht hat und was das Ergebnis bedeutet.`;
+
+        const interpretationResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: [{ role: 'system', content: interpretationPrompt }],
+                stream: true
+            }),
+            signal: abortController.signal
+        });
+
+        if (!interpretationResponse.ok) {
+            const errorText = await interpretationResponse.text();
+            throw new Error(`Ollama interpretation error: ${interpretationResponse.status} - ${errorText}`);
+        }
+
+        const reader = interpretationResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.message && data.message.content) {
+                            aiResponseContent += data.message.content;
+                            totalTokens += (data.prompt_eval_count || 0) + (data.eval_count || 0);
+                            res.write(JSON.stringify({
+                                type: 'token',
+                                token: data.message.content,
+                                done: data.done || false
+                            }) + '\n');
+                            if (typeof res.flush === 'function') res.flush();
+                        }
+                    } catch (parseError) {
+                        console.error('Parse error in interpretation stream:', parseError.message, 'Line:', line);
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+
+        const endTime = Date.now();
+        duration = ((endTime - startTime) / 1000).toFixed(1);
+
+        // Temporäre Nachricht entfernen
+        currentChat.messages = currentChat.messages.filter(msg => msg.id !== currentMessageId);
+
+        // AI-Nachricht speichern
+        currentChat.messages.push({
+            id: uuidv4(),
+            sender: 'ai',
+            content: aiResponseContent,
+            tokens: totalTokens,
+            time: duration,
+            codeexecution_results: validatedCodeResult // Direkt als Objekt speichern
+        });
+
+        // User-Tokens und Statistiken aktualisieren
+        user['used-tokens'] = (user['used-tokens'] || 0) + totalTokens;
+        stats.overallStats.totalTokensUsed = (stats.overallStats.totalTokensUsed || 0) + totalTokens;
+        const today = new Date().toISOString().slice(0, 10);
+        if (!stats.dailyStats[today]) {
+            stats.dailyStats[today] = { totalTokensUsed: 0 };
+        }
+        stats.dailyStats[today].totalTokensUsed += totalTokens;
+
+        saveData(CHATS_PATH, chats);
+        saveData(USERS_PATH, users);
+        saveData(STATS_PATH, stats);
+
+        // End-Event senden
+        res.write(JSON.stringify({
+            type: 'end',
+            tokens: totalTokens,
+            time: duration,
+            chatId: currentChat.id,
+            isNewChat
+        }) + '\n');
+        
+        res.end();
+
+    } catch (error) {
+        console.error('Code Interpreter Error:', error);
+        if (error.name === 'AbortError') {
+            if (!res.headersSent) {
+                res.status(499).json({
+                    type: 'aborted',
+                    message: 'Code-Ausführung abgebrochen'
+                });
+            } else {
+                res.write(JSON.stringify({
+                    type: 'aborted',
+                    message: 'Code-Ausführung abgebrochen'
+                }) + '\n');
+                res.end();
+            }
+        } else {
+            const errorMessage = error.message || 'Code Interpreter Fehler';
+            if (!res.headersSent) {
+                res.status(500).json({
+                    type: 'error',
+                    message: errorMessage
+                });
+            } else {
+                res.write(JSON.stringify({
+                    type: 'error',
+                    message: errorMessage
+                }) + '\n');
+                res.end();
+            }
+        }
+    } finally {
+        if (req.userId && userGenerationControllers.has(req.userId)) {
+            userGenerationControllers.delete(req.userId);
+        }
+        // Sicherstellen, dass currentChat definiert ist, bevor darauf zugegriffen wird
+        if (currentChat && currentMessageId) {
+            currentChat.messages = currentChat.messages.filter(msg => msg.id !== currentMessageId);
+            saveData(CHATS_PATH, chats);
+        }
     }
 });
+
+// Hilfsfunktion für Ollama API-Anfragen
+async function makeAIRequest(prompt, model, userId, stream = true) {
+    const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+    const ollamaPort = config.ollama.port;
+    const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
+
+    const messages = [
+        { role: 'system', content: prompt }
+    ];
+
+    try {
+        const response = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages,
+                stream
+            }),
+            signal: userGenerationControllers.get(userId)?.signal
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
+        }
+
+        if (!stream) {
+            return await response.json();
+        }
+
+        // Stream-Handling
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        return {
+            async *[Symbol.asyncIterator]() {
+                try {
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (line.trim() === '') continue;
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.message && data.message.content) {
+                                    yield {
+                                        type: 'token',
+                                        token: data.message.content,
+                                        tokens: data.prompt_eval_count && data.eval_count ? data.prompt_eval_count + data.eval_count : 0,
+                                        done: data.done || false
+                                    };
+                                }
+                            } catch (parseError) {
+                                console.error('Parse error in Ollama stream:', parseError.message, 'Line:', line);
+                            }
+                        }
+                    }
+                } finally {
+                    reader.releaseLock();
+                }
+            }
+        };
+    } catch (error) {
+        throw error;
+    }
+}
+
+// Hilfsfunktion für Code-Ausführung
+async function executeCode({ code, language, internet, packages, version }) {
+    try {
+        const response = await fetch('http://localhost:2463/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                code,
+                language,
+                internet: internet.toString(),
+                packages,
+                version
+            })
+        });
+
+        const result = await response.json();
+        return result;
+    } catch (error) {
+        return {
+            status: 'error',
+            message: `Code Interpreter Verbindungsfehler: ${error.message}`
+        };
+    }
+}
 
 app.delete('/api/chats/:id', authenticateUser, (req, res) => {
     const chatId = req.params.id;

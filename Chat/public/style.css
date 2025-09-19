@@ -1005,3 +1005,278 @@ input, textarea, select, button {
 .deepsearch-url:hover {
     text-decoration: underline;
 }
+
+/* Code Interpreter Styles - zu deiner style.css hinzufügen */
+
+/* Loading Spinner für verschiedene Features */
+.codeinterpreter-loading {
+    color: #ff6b35;
+    font-size: 16px;
+    margin-right: 8px;
+    animation: spin 1s linear infinite;
+}
+
+.websearch-loading {
+    color: #4285f4;
+    font-size: 16px;
+    margin-right: 8px;
+    animation: spin 1s linear infinite;
+}
+
+.deepsearch-loading {
+    color: #34a853;
+    font-size: 16px;
+    margin-right: 8px;
+    animation: spin 1s linear infinite;
+}
+
+.normal-loading {
+    color: #9aa0a6;
+    font-size: 16px;
+    margin-right: 8px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Code Execution Results Container (dunkler Hintergrund) */
+.codeexecution-results {
+    background: #000; /* tiefschwarz */
+    border: 1px solid #222;
+    border-radius: 7px; /* vorher 12px */
+    padding: 10px; /* vorher 16px */
+    margin: 7px 0; /* vorher 12px */
+    font-family: 'Courier New', monospace;
+    box-shadow: 0 3px 7px rgba(0, 0, 0, 0.6);
+    font-size: 12px;
+}
+
+.codeexecution-results .execution-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 7px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.codeexecution-results .execution-title {
+    font-weight: bold;
+    color: white;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+}
+
+.codeexecution-results .execution-title i {
+    margin-right: 5px;
+    font-size: 13px;
+}
+
+.codeexecution-results .execution-language {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 19px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.codeexecution-results .execution-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 7px;
+    margin-bottom: 7px;
+}
+
+/* Execution Info Items – jetzt 70% kleiner insgesamt */
+.codeexecution-results .execution-info-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 3px; /* kleiner */
+    border-radius: 3px;
+}
+
+.codeexecution-results .execution-info-item strong {
+    color: white;
+    display: block;
+    margin-bottom: 1px;
+    font-size: 8px; 
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.codeexecution-results .execution-info-item span {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+}
+
+.codeexecution-results .packages-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.codeexecution-results .package-tag {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 19px;
+}
+
+.codeexecution-results .execution-code {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    padding: 7px;
+    margin: 7px 0;
+    color: #f8f9fa;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.codeexecution-results .execution-output {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 4px;
+    padding: 7px;
+    color: #00ff00;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.codeexecution-results .execution-error {
+    background: rgba(220, 53, 69, 0.15);
+    border: 1px solid #dc3545;
+    color: #ff6b6b;
+    font-size: 11px;
+    padding: 6px;
+}
+
+.codeexecution-results .execution-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 5px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.codeexecution-results .status-success {
+    background: rgba(40, 167, 69, 0.15);
+    color: #28a745;
+    border: 1px solid #28a745;
+}
+
+.codeexecution-results .status-error {
+    background: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
+    border: 1px solid #dc3545;
+}
+
+.codeexecution-results .status-success::before {
+    content: "✓";
+    margin-right: 3px;
+}
+
+.codeexecution-results .status-error::before {
+    content: "✗";
+    margin-right: 3px;
+}
+
+/* Progress Messages Styling */
+.progress-message {
+    color: #ff6b35;
+    font-style: italic;
+    margin: 5px 0;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+}
+
+.progress-message i {
+    margin-right: 5px;
+    animation: spin 1s linear infinite;
+}
+
+/* Feature Menu Active States */
+.feature-menu-item.active {
+    background: #ff6b35 !important;
+    color: white !important;
+}
+
+.feature-menu-item.active i {
+    animation: pulse 2s infinite;
+}
+
+/* Pulse + Spin Keyframes */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Dark mode adjustments (auf Schwarz angepasst) */
+@media (prefers-color-scheme: dark) {
+    .codeexecution-results {
+        background: #000;
+        border-color: #333;
+    }
+    
+    .codeexecution-results .execution-output {
+        background: rgba(255, 255, 255, 0.05);
+        color: #00ff41;
+    }
+    
+    .codeexecution-results .execution-code {
+        background: rgba(255, 255, 255, 0.05);
+        color: #f1f3f4;
+    }
+
+    .codeexecution-results .execution-info-item {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .codeexecution-results .execution-language {
+        background: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .codeexecution-results .execution-info {
+        grid-template-columns: 1fr;
+    }
+    
+    .codeexecution-results .execution-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .codeexecution-results .packages-list {
+        flex-direction: column;
+    }
+    
+    .codeexecution-results .package-tag {
+        display: inline-block;
+        margin-bottom: 3px;
+    }
+}

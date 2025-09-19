@@ -65,7 +65,7 @@
     <script>
         // Globale Funktionen
         window.copyCode = function(button) {
-            const codeElement = button.closest('.code-block').querySelector('code');
+            const codeElement = button.closest('.code-block, .execution-code, .execution-output').querySelector('code');
             const textToCopy = codeElement.textContent;
             navigator.clipboard.writeText(textToCopy).then(() => {
                 button.innerHTML = '<i class="fas fa-check"></i>';
@@ -86,7 +86,6 @@
                 return;
             }
 
-            // Button-ID-Mapping, um Groß-/Kleinschreibung korrekt zu handhaben
             const buttonIdMap = {
                 'Codeinterpreter': 'codeInterpreterBtn',
                 'Websearch': 'websearchBtn',
@@ -408,6 +407,11 @@
                     
                     if (response.ok) {
                         abortController.abort();
+                        isGeneratingResponse = false;
+                        currentMessageId = null;
+                        sendMessageBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+                        messageInput.disabled = false;
+                        messageInput.focus();
                     }
                 } catch (error) {
                     console.error('Fehler beim Stoppen der Generation:', error);
@@ -419,7 +423,7 @@
                 return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
             }
 
-            function formatMessageContent(content, websearchResults = null, deepsearchResults = null) {
+            function formatMessageContent(content, websearchResults = null, deepsearchResults = null, codeExecutionResults = null) {
                 const codeBlockPlaceholders = [];
                 content = content.replace(/```([\s\S]*?)```/g, (match, codeContent) => {
                     const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
@@ -466,6 +470,7 @@
                     );
                 });
 
+                // Websearch Results
                 if (websearchResults && websearchResults.quellen && Array.isArray(websearchResults.quellen)) {
                     const urlsHtml = websearchResults.quellen
                         .filter(url => url && typeof url === 'string' && url.startsWith('http'))
@@ -476,6 +481,7 @@
                     }
                 }
 
+                // Deepsearch Results
                 if (deepsearchResults && deepsearchResults.quellen && Array.isArray(deepsearchResults.quellen)) {
                     const urlsHtml = deepsearchResults.quellen
                         .filter(url => url && typeof url === 'string' && url.startsWith('http'))
@@ -484,6 +490,73 @@
                     if (urlsHtml) {
                         formattedContent += `<div class="deepsearch-results"><strong>Deepsearch Quellen:</strong><br>${urlsHtml}</div>`;
                     }
+                }
+
+                // Code Execution Results
+                if (codeExecutionResults) {
+                    let parsedResults;
+                    try {
+                        parsedResults = typeof codeExecutionResults === 'string' ? JSON.parse(codeExecutionResults) : codeExecutionResults;
+                    } catch (e) {
+                        console.error('Fehler beim Parsen der Codeausführungsergebnisse:', e, codeExecutionResults);
+                        return formattedContent;
+                    }
+
+                    if (!parsedResults || !parsedResults.code) {
+                        console.warn('Keine gültigen Codeausführungsergebnisse:', parsedResults);
+                        return formattedContent;
+                    }
+
+                    const packages = parsedResults.packages || [];
+                    const packagesHtml = packages.length > 0 
+                        ? `<div class="packages-list">${packages.map(pkg => `<span class="package-tag">${pkg}</span>`).join(' ')}</div>`
+                        : '<span>Keine</span>';
+
+                    const status = parsedResults.status || (parsedResults.output ? 'success' : parsedResults.error ? 'error' : 'unknown');
+                    const statusClass = status === 'success' ? 'status-success' : 'status-error';
+                    const outputClass = status === 'success' ? 'execution-output' : 'execution-output execution-error';
+                    const output = parsedResults.output || parsedResults.error || 'Keine Ausgabe verfügbar';
+
+                    formattedContent += `
+                        <div class="codeexecution-results">
+                            <div class="execution-header">
+                                <div class="execution-title">
+                                    <i class="fas fa-code"></i> Code Ausführung
+                                </div>
+                                <div class="execution-language">${parsedResults.language || 'Unbekannt'}</div>
+                            </div>
+                            
+                            <div class="execution-status ${statusClass}">
+                                ${status.toUpperCase()}
+                            </div>
+                            
+                            <div class="execution-info">
+                                <div class="execution-info-item">
+                                    <strong>Sprache:</strong>
+                                    <span>${parsedResults.language || 'Unbekannt'} ${parsedResults.version || ''}</span>
+                                </div>
+                                <div class="execution-info-item">
+                                    <strong>Internet:</strong>
+                                    <span>${parsedResults.internet === 'true' ? 'Aktiviert' : 'Deaktiviert'}</span>
+                                </div>
+                                <div class="execution-info-item">
+                                    <strong>Pakete:</strong>
+                                    ${packagesHtml}
+                                </div>
+                                ${parsedResults.description ? `<div class="execution-info-item"><strong>Beschreibung:</strong><span>${escapeHtml(parsedResults.description)}</span></div>` : ''}
+                            </div>
+                            
+                            <div class="execution-code">
+                                <div class="code-header"><span>${parsedResults.language || 'Code'}</span><button onclick="copyCode(this)"><i class="fas fa-copy"></i></button></div>
+                                <pre><code class="language-${parsedResults.language || 'text'}">${escapeHtml(parsedResults.code)}</code></pre>
+                            </div>
+                            
+                            <div class="${outputClass}">
+                                <div class="code-header"><span>Ausgabe</span><button onclick="copyCode(this)"><i class="fas fa-copy"></i></button></div>
+                                <pre><code>${escapeHtml(output)}</code></pre>
+                            </div>
+                        </div>
+                    `;
                 }
                 
                 return formattedContent;
@@ -494,17 +567,26 @@
                 messageElement.classList.add('chat-message', message.sender);
                 messageElement.dataset.messageId = message.id;
 
-                const iconHtml = message.sender === 'user' ? 'DU' : '<img src="icon.png" alt="AI Icon" width="32" height="32">';
+                const iconHtml = message.sender === 'user' ? 'DU' : '<img src="/icon.png" alt="AI Icon" width="32" height="32">';
                 const infoHtml = message.sender === 'ai' && message.tokens !== undefined
                     ? `<div class="chat-message-info">⚡ ${message.tokens} ⌛ ${message.time}s</div>`
                     : '';
 
-                let contentHtml = formatMessageContent(message.content, message.websearchResults, message.deepsearchResults);
+                let contentHtml = formatMessageContent(
+                    message.content, 
+                    message.websearchResults, 
+                    message.deepsearchResults,
+                    message.codeexecution_results || message.codeExecutionResults
+                );
+
                 if (message.isWebsearchPending) {
                     contentHtml = '<i class="fas fa-spinner fa-spin websearch-loading"></i> Websearch läuft...';
                 }
                 if (message.isDeepsearchPending) {
                     contentHtml = '<i class="fas fa-spinner fa-spin deepsearch-loading"></i> Deepsearch läuft...';
+                }
+                if (message.isCodeExecutionPending) {
+                    contentHtml = '<i class="fas fa-spinner fa-spin codeinterpreter-loading"></i> Code wird ausgeführt...';
                 }
 
                 messageElement.innerHTML = `
@@ -518,7 +600,7 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
 
-            function updateLastAiMessage(chunk, isDone = false, stats = {}, websearchResults = null, deepsearchResults = null) {
+            function updateLastAiMessage(chunk, isDone = false, stats = {}, websearchResults = null, deepsearchResults = null, codeExecutionResults = null) {
                 let lastMessageElement = chatMessages.querySelector('.chat-message.ai:last-child');
                 
                 if (!lastMessageElement) {
@@ -531,7 +613,7 @@
                 const newContent = currentContent + chunk;
                 bubble.dataset.rawContent = newContent;
                 
-                bubble.innerHTML = formatMessageContent(newContent, websearchResults, deepsearchResults);
+                bubble.innerHTML = formatMessageContent(newContent, websearchResults, deepsearchResults, codeExecutionResults);
 
                 if (isDone) {
                     const infoContainer = document.createElement('div');
@@ -545,18 +627,25 @@
 
             function renderChatMessages(messages) {
                 chatMessages.innerHTML = '';
-                messages.forEach(msg => addMessageToChat(msg));
+                messages.forEach(msg => {
+                    console.log('Rendering message:', msg.id, 'with codeexecution_results:', msg.codeexecution_results);
+                    addMessageToChat(msg);
+                });
+                console.log('Finished rendering all messages');
             }
 
             async function sendMessage() {
                 const content = messageInput.value.trim();
-                if (!content || isGeneratingResponse) return;
+                if (!content || isGeneratingResponse) {
+                    console.warn('SendMessage abgebrochen: Entweder kein Inhalt oder Generierung läuft bereits.');
+                    return;
+                }
 
                 isGeneratingResponse = true;
                 currentMessageId = `msg_${Date.now()}_ai`;
                 sendMessageBtn.innerHTML = '<i class="fas fa-stop"></i>';
                 messageInput.value = '';
-                messageInput.disabled = false;
+                messageInput.disabled = true;
 
                 addMessageToChat({ 
                     id: `msg_${Date.now()}_user`, 
@@ -564,34 +653,76 @@
                     content 
                 });
 
+                let loadingMessage = { 
+                    id: currentMessageId, 
+                    sender: 'ai', 
+                    content: '' 
+                };
+
+                if (activeFeature === 'Codeinterpreter') {
+                    loadingMessage.isCodeExecutionPending = true;
+                } else if (activeFeature === 'Websearch') {
+                    loadingMessage.isWebsearchPending = true;
+                } else if (activeFeature === 'DeepSearch') {
+                    loadingMessage.isDeepsearchPending = true;
+                } else {
+                    loadingMessage.content = '<i class="fas fa-spinner fa-spin normal-loading"></i> KI antwortet...';
+                }
+
+                addMessageToChat(loadingMessage);
+
                 try {
                     abortController = new AbortController();
                     let response;
 
-                    if (activeFeature === 'Websearch') {
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Request-Timeout nach 10 Minuten')), 600000)
+                    );
+
+                    if (activeFeature === 'Codeinterpreter') {
+                        console.log('Sending Code Interpreter request');
+                        response = await Promise.race([
+                            authenticatedFetch('/api/codeinterpreter', {
+                                method: 'POST',
+                                headers: { 'X-Chat-ID': currentChatId || '' },
+                                body: JSON.stringify({ message: content, model: modelSelector.value }),
+                                signal: abortController.signal
+                            }),
+                            timeoutPromise
+                        ]);
+                    } else if (activeFeature === 'Websearch') {
                         console.log('Sending Websearch request');
-                        response = await authenticatedFetch('/api/websearch', {
-                            method: 'POST',
-                            headers: { 'X-Chat-ID': currentChatId || '' },
-                            body: JSON.stringify({ message: content, model: modelSelector.value }),
-                            signal: abortController.signal
-                        });
+                        response = await Promise.race([
+                            authenticatedFetch('/api/websearch', {
+                                method: 'POST',
+                                headers: { 'X-Chat-ID': currentChatId || '' },
+                                body: JSON.stringify({ message: content, model: modelSelector.value }),
+                                signal: abortController.signal
+                            }),
+                            timeoutPromise
+                        ]);
                     } else if (activeFeature === 'DeepSearch') {
                         console.log('Sending DeepSearch request');
-                        response = await authenticatedFetch('/api/deepsearch', {
-                            method: 'POST',
-                            headers: { 'X-Chat-ID': currentChatId || '' },
-                            body: JSON.stringify({ message: content, model: modelSelector.value }),
-                            signal: abortController.signal
-                        });
+                        response = await Promise.race([
+                            authenticatedFetch('/api/deepsearch', {
+                                method: 'POST',
+                                headers: { 'X-Chat-ID': currentChatId || '' },
+                                body: JSON.stringify({ message: content, model: modelSelector.value }),
+                                signal: abortController.signal
+                            }),
+                            timeoutPromise
+                        ]);
                     } else {
                         console.log('Sending standard chat request');
-                        response = await authenticatedFetch('/api/chat/send', {
-                            method: 'POST',
-                            headers: { 'X-Chat-ID': currentChatId || '' },
-                            body: JSON.stringify({ message: content, model: modelSelector.value }),
-                            signal: abortController.signal
-                        });
+                        response = await Promise.race([
+                            authenticatedFetch('/api/chat/send', {
+                                method: 'POST',
+                                headers: { 'X-Chat-ID': currentChatId || '' },
+                                body: JSON.stringify({ message: content, model: modelSelector.value }),
+                                signal: abortController.signal
+                            }),
+                            timeoutPromise
+                        ]);
                     }
 
                     if (!response.ok) {
@@ -645,53 +776,90 @@
                     let streamEnded = false;
                     let websearchResults = null;
                     let deepsearchResults = null;
-
-                    while (true) {
-                        const { value, done } = await reader.read();
-                        if (done) break;
-
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-                        for (const line of lines) {
-                            let data;
-                            try {
-                                data = JSON.parse(line);
-                            } catch (e) {
-                                console.warn("Konnte Stream-Zeile nicht parsen:", line);
-                                continue;
-                            }
-                            if (data.type === 'token') {
-                                aiResponseContent += data.token;
-                                updateLastAiMessage(data.token, false, {}, websearchResults, deepsearchResults);
-                            } else if (data.type === 'websearch') {
-                                websearchResults = data.websearchResults;
-                                updateLastAiMessage('', false, {}, websearchResults, deepsearchResults);
-                            } else if (data.type === 'deepsearch') {
-                                deepsearchResults = data.deepsearchResults;
-                                updateLastAiMessage('', false, {}, websearchResults, deepsearchResults);
-                            } else if (data.type === 'end') {
-                                updateLastAiMessage('', true, { tokens: data.tokens, time: data.time }, websearchResults, deepsearchResults);
-                                if (data.isNewChat) currentChatId = data.chatId;
-                                loadChatList();
-                                loadUserInfo();
-                                streamEnded = true;
-                                if (activeFeature) {
-                                    document.getElementById(buttonIdMap[activeFeature]).classList.remove('active');
-                                    showPopup(`${activeFeature} deaktiviert.`, 'info');
-                                    activeFeature = null;
-                                }
-                                break;
-                            } else if (data.type === 'error') {
-                                throw new Error(data.details || data.message || 'Fehler vom Server im Stream');
-                            }
-                        }
-                        if (streamEnded) break;
+                    let codeExecutionResults = null;
+                    let buffer = '';
+                    
+                    const lastAiMessage = chatMessages.querySelector('.chat-message.ai:last-child');
+                    if (lastAiMessage) {
+                        lastAiMessage.remove();
                     }
+
+                    try {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                streamEnded = true;
+                                break;
+                            }
+
+                            const decodedChunk = decoder.decode(value, { stream: true });
+                            buffer += decodedChunk;
+                            const lines = buffer.split('\n');
+                            buffer = lines.pop() || '';
+
+                            for (const line of lines) {
+                                const trimmedLine = line.trim();
+                                if (!trimmedLine) continue;
+
+                                let data;
+                                try {
+                                    data = JSON.parse(trimmedLine);
+                                } catch (parseError) {
+                                    console.warn('Konnte Stream-Zeile nicht parsen:', trimmedLine, parseError);
+                                    continue;
+                                }
+
+                                if (data.type === 'token') {
+                                    aiResponseContent += data.token;
+                                    updateLastAiMessage(data.token, false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                } else if (data.type === 'websearch') {
+                                    websearchResults = data.websearchResults;
+                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                } else if (data.type === 'deepsearch') {
+                                    deepsearchResults = data.deepsearchResults;
+                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                } else if (data.type === 'codeexecution') {
+                                    codeExecutionResults = data.codeExecutionResults;
+                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                } else if (data.type === 'progress') {
+                                    updateLastAiMessage(data.message + '\n', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                } else if (data.type === 'end') {
+                                    updateLastAiMessage('', true, { tokens: data.tokens, time: data.time }, websearchResults, deepsearchResults, codeExecutionResults);
+                                    if (data.isNewChat) currentChatId = data.chatId;
+                                    loadChatList();
+                                    loadUserInfo();
+                                    streamEnded = true;
+                                    if (activeFeature) {
+                                        const buttonIdMap = {
+                                            'Codeinterpreter': 'codeInterpreterBtn',
+                                            'Websearch': 'websearchBtn',
+                                            'DeepSearch': 'deepSearchBtn'
+                                        };
+                                        document.getElementById(buttonIdMap[activeFeature]).classList.remove('active');
+                                        showPopup(`${activeFeature} deaktiviert.`, 'info');
+                                        activeFeature = null;
+                                    }
+                                    break;
+                                } else if (data.type === 'error') {
+                                    throw new Error(data.details || data.message || 'Fehler vom Server im Stream');
+                                }
+                            }
+
+                            if (streamEnded) break;
+                        }
+                    } catch (streamError) {
+                        if (streamError.name !== 'AbortError' && streamError.message !== 'Request-Timeout nach 10 Minuten') {
+                            console.error('Stream-Fehler:', streamError);
+                            updateLastAiMessage(`\n\n**Fehler:** ${streamError.message}`, false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                        }
+                    } finally {
+                        reader.releaseLock();
+                    }
+
                 } catch (error) {
-                    if (error.name !== 'AbortError') {
+                    if (error.name !== 'AbortError' && error.message !== 'Request-Timeout nach 10 Minuten') {
                         console.error('Fehler bei der KI-Antwort:', error);
-                        updateLastAiMessage(`\n\n**Fehler:** ${error.message}`);
+                        updateLastAiMessage(`\n\n**Fehler:** ${error.message}`, false, {}, null, null, null);
                     }
                 } finally {
                     isGeneratingResponse = false;
