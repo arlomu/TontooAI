@@ -17,9 +17,10 @@ sudo apt update -y >>"$LOG_FILE" 2>&1
 progress "Installing OpenSSL..."
 sudo apt install -y openssl >>"$LOG_FILE" 2>&1
 progress "Generating SSL certificate..."
-mkdir -p ssl
+cd Chat
 cd ssl
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
+cd ..
 cd ..
 progress "Ensuring systemd is installed..."
 sudo apt install -y systemd >>"$LOG_FILE" 2>&1
@@ -30,26 +31,16 @@ ollama pull gemma3:1b >>"$LOG_FILE" 2>&1
 progress "Installing Node.js and npm..."
 sudo apt install -y nodejs npm >>"$LOG_FILE" 2>&1
 
-progress "Creating systemd service..."
-SERVICE_FILE="/etc/systemd/system/tontooai.service"
-sudo bash -c "cat > $SERVICE_FILE" <<EOL
-[Unit]
-Description=TontooAI
-After=network.target
+cd Chat
+progress "Installing Node.js dependencies..."
+npm install >>"$LOG_FILE" 2>&1
 
-[Service]
-ExecStart=/usr/bin/node /path/to/your/app.js
-WorkingDirectory=/path/to/your
-Restart=always
-User=$USER
-Environment=NODE_ENV=production
+cd ..
+cd Web-search
+progress "Installing Node.js dependencies..."
+npm install >>"$LOG_FILE" 2>&1
 
-[Install]
-WantedBy=multi-user.target
-EOL
-progress "Enabling service on boot..."
-sudo systemctl daemon-reload >>"$LOG_FILE" 2>&1
-sudo systemctl enable tontooai.service >>"$LOG_FILE" 2>&1
-sudo systemctl start tontooai.service >>"$LOG_FILE" 2>&1
+cd ..
+
 progress "Setup complete!"
 echo -e "\nAll done! Logs at $LOG_FILE"

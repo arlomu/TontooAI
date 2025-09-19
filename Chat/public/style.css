@@ -879,3 +879,82 @@ input, textarea, select, button {
     padding: 6px;
     font-size: 12px;
 }
+/* Plus Button und Feature Menu */
+.feature-menu-container {
+    position: relative;
+    margin-right: 10px;
+}
+
+#featureMenuBtn {
+    padding: 12px;
+    border: 1px solid var(--akzent-farbe);
+    border-radius: var(--border-radius);
+    background-color: rgba(54, 54, 54, 0.7);
+    color: var(--sekundaer-text-farbe);
+    font-size: 1.2em;
+    cursor: pointer;
+    transition: all var(--transition-speed) ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+}
+
+#featureMenuBtn:hover {
+    background-color: var(--akzent-farbe);
+    color: var(--text-farbe);
+    transform: translateY(-1px);
+}
+
+.feature-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background-color: var(--haupt-farbe);
+    border: 1px solid var(--akzent-farbe);
+    border-radius: var(--border-radius);
+    padding: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 180px;
+    z-index: 100;
+}
+
+.feature-menu.active {
+    display: flex;
+}
+
+.feature-menu-item {
+    padding: 10px 12px;
+    border: none;
+    border-radius: 5px;
+    background-color: var(--hintergrund-akzent);
+    color: var(--text-farbe);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--transition-speed) ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.feature-menu-item:hover {
+    background-color: var(--akzent-farbe);
+}
+
+.feature-menu-item i {
+    font-size: 1em;
+    width: 20px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .feature-menu {
+        left: auto;
+        right: 0;
+    }
+
+}

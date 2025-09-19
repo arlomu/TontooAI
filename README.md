@@ -54,15 +54,8 @@ git clone https://github.com/arlomu/TontooAI.git
 sudo bash setup.sh
 ```
 
-Open your browser at [http://localhost](http://localhost)
+Open your browser at [https://localhost](https://localhost)
 Or at Port 8080 As Seccond Server
-
----
-
-## Feature Request
-
-[1. Creating a Request](https://ziel-url.com)
-
 
 ---
 
@@ -77,3 +70,4 @@ MIT License © 2025
 * GitHub Issues: [https://github.com/your-username/ollama-web-ui/issues](https://github.com/your-username/ollama-web-ui/issues)
 * Email: [your@email.com](mailto:your@email.com)
 
+Contact Comming Soon!

@@ -1,6 +1,7 @@
-node_modules/*
-data/attempts.json
-data/chats.json
-data/stats.json
-ssl/cert.pem
-ssl/key.pem
+Chat/node_modules/*
+Chat/data/attempts.json
+Chat/data/chats.json
+Chat/data/stats.json
+Chat/ssl/cert.pem
+Chat/ssl/key.pem
+Web-search/node_modules/*

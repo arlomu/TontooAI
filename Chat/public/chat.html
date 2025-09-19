@@ -26,6 +26,23 @@
                     <!-- Nachrichten werden hier dynamisch geladen -->
                 </div>
                 <div class="chat-input-area">
+                    <div class="feature-menu-container">
+                        <button id="featureMenuBtn" title="Features">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <div class="feature-menu" id="featureMenu">
+                            <button class="feature-menu-item" onclick="showFeaturePopup('Codeinterpreter')">
+                                <i class="fas fa-code"></i>Codeinterpreter
+                            </button>
+                            <button class="feature-menu-item" onclick="showFeaturePopup('Websearch')">
+                                <i class="fas fa-search"></i>Websearch
+                            </button>
+                            <button class="feature-menu-item" onclick="showFeaturePopup('DeepSearch')">
+                                <i class="fas fa-search-plus"></i>DeepSearch
+                            </button>
+                        </div>
+                    </div>
+                    
                     <textarea id="messageInput" placeholder="" rows="1"></textarea>
                     <button id="sendMessageBtn"><i class="fas fa-paper-plane"></i></button>
                     <select id="modelSelector" class="model-selector"></select>
@@ -58,6 +75,13 @@
                 showPopup('Fehler beim Kopieren des Codes.', 'error');
             });
         };
+
+        // Feature Menu Funktionen
+        function showFeaturePopup(featureName) {
+            showPopup(`${featureName} ist nicht verfügbar`, 'info');
+            // Menü nach Klick schließen
+            document.getElementById('featureMenu').classList.remove('active');
+        }
 
         // Hilfsfunktion für authentifizierte Anfragen
         async function authenticatedFetch(url, options = {}) {
@@ -119,6 +143,27 @@
                 document.getElementById('toggleSidebarBtn').title = lang.chat || 'Chat';
                 document.getElementById('messageInput').placeholder = lang.send || 'Nachricht eingeben...';
             })();
+
+            // Feature Menu Event Listener
+            const featureMenuBtn = document.getElementById('featureMenuBtn');
+            const featureMenu = document.getElementById('featureMenu');
+            
+            featureMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                featureMenu.classList.toggle('active');
+            });
+            
+            // Menü schließen wenn woanders hingeklickt wird
+            document.addEventListener('click', (e) => {
+                if (!featureMenu.contains(e.target) && e.target !== featureMenuBtn) {
+                    featureMenu.classList.remove('active');
+                }
+            });
+            
+            // Verhindern dass Klicks im Menü es schließen
+            featureMenu.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
 
             const chatSidebar = document.getElementById('chatSidebar');
             const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
