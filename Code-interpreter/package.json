@@ -1,0 +1,26 @@
+{
+  "name": "code-interpreter-service",
+  "version": "1.0.0",
+  "description": "AI Code Interpreter Service für Python und Node.js",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "code-interpreter",
+    "python",
+    "nodejs",
+    "ai",
+    "sandbox"
+  ],
+  "author": "Dein Name",
+  "license": "MIT"
+}
