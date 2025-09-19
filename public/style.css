@@ -20,12 +20,13 @@
 
 body {
     font-family: 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-    background-color: var(--hintergrund-farbe);
+    /* Ersetzen Sie die background-color Zeile durch den gradient: */
+    background: linear-gradient(to bottom, var(--hintergrund-farbe), #000022);
     color: var(--text-farbe);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    overflow: hidden; /* Verhindert Scrollbalken auf Body */
+    overflow: hidden;
 }
 
 /* Allgemeine Container und Kartenstile */
@@ -223,8 +224,8 @@ button.danger {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    background-color: var(--hintergrund-farbe);
-    position: relative; /* Für User-Info-Bereich */
+    background-color: transparent; /* ÄNDERUNG: von var(--hintergrund-farbe) zu transparent */
+    position: relative;
 }
 
 .user-info-footer {
