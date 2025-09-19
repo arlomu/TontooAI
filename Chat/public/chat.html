@@ -79,25 +79,40 @@
         let activeFeature = null; // Track active feature (null, 'Codeinterpreter', 'Websearch', 'DeepSearch')
 
         function toggleFeature(featureName) {
-            // If trying to activate a feature when another is active, show a message
+            console.log('Toggling feature:', featureName);
+
             if (activeFeature && activeFeature !== featureName) {
                 showPopup(`Nur eine Funktion kann aktiv sein. Deaktiviere ${activeFeature} zuerst.`, 'info');
                 return;
             }
 
-            // Toggle the feature
+            // Button-ID-Mapping, um Groß-/Kleinschreibung korrekt zu handhaben
+            const buttonIdMap = {
+                'Codeinterpreter': 'codeInterpreterBtn',
+                'Websearch': 'websearchBtn',
+                'DeepSearch': 'deepSearchBtn'
+            };
+            const buttonId = buttonIdMap[featureName];
+            const button = document.getElementById(buttonId);
+            if (!button) {
+                console.error(`Button with ID ${buttonId} not found`);
+                showPopup(`Fehler: Schaltfläche ${featureName} nicht gefunden.`, 'error');
+                return;
+            }
+
             if (activeFeature === featureName) {
                 activeFeature = null;
-                document.getElementById(`${featureName.toLowerCase()}Btn`).classList.remove('active');
+                button.classList.remove('active');
+                showPopup(`${featureName} deaktiviert.`, 'info');
             } else {
                 activeFeature = featureName;
                 document.querySelectorAll('.feature-menu-item').forEach(btn => btn.classList.remove('active'));
-                document.getElementById(`${featureName.toLowerCase()}Btn`).classList.add('active');
+                button.classList.add('active');
+                showPopup(`${featureName} aktiviert.`, 'success');
             }
             document.getElementById('featureMenu').classList.remove('active');
         }
 
-        // Hilfsfunktion für authentifizierte Anfragen
         async function authenticatedFetch(url, options = {}) {
             const token = localStorage.getItem('authToken');
             if (!token) {
@@ -131,8 +146,12 @@
             let lang = {};
             let userLang = 'EN';
             async function loadLangFile(langCode) {
-                const res = await fetch(`/Lang_${langCode}.json`);
-                lang = await res.json();
+                try {
+                    const res = await fetch(`/Lang_${langCode}.json`);
+                    lang = await res.json();
+                } catch (error) {
+                    console.error('Fehler beim Laden der Sprachdatei:', error);
+                }
             }
             async function getUserLanguage() {
                 try {
@@ -152,12 +171,11 @@
                 userLang = await getUserLanguage();
                 await loadLangFile(userLang);
 
-                document.getElementById('newChatBtnText').textContent = lang.new_chat;
+                document.getElementById('newChatBtnText').textContent = lang.new_chat || 'New Chat';
                 document.getElementById('toggleSidebarBtn').title = lang.chat || 'Chat';
                 document.getElementById('messageInput').placeholder = lang.send || 'Nachricht eingeben...';
             })();
 
-            // Feature Menu Event Listener
             const featureMenuBtn = document.getElementById('featureMenuBtn');
             const featureMenu = document.getElementById('featureMenu');
             
@@ -357,14 +375,14 @@
             async function loadModels() {
                 try {
                     const response = await authenticatedFetch('/api/models');
-                    if(!response.ok) throw new Error('Modelle konnten nicht geladen werden.');
+                    if (!response.ok) throw new Error('Modelle konnten nicht geladen werden.');
                     const models = await response.json();
                     modelSelector.innerHTML = '';
                     if (Object.keys(models).length === 0) {
-                         modelSelector.innerHTML = '<option value="">Keine Modelle verfügbar</option>';
-                         sendMessageBtn.disabled = true;
-                         messageInput.disabled = true;
-                         messageInput.placeholder = "Keine Modelle konfiguriert.";
+                        modelSelector.innerHTML = '<option value="">Keine Modelle verfügbar</option>';
+                        sendMessageBtn.disabled = true;
+                        messageInput.disabled = true;
+                        messageInput.placeholder = "Keine Modelle konfiguriert.";
                     } else {
                         for (const modelId in models) {
                             const option = document.createElement('option');
@@ -373,7 +391,7 @@
                             modelSelector.appendChild(option);
                         }
                     }
-                } catch(error) {
+                } catch (error) {
                     console.error("Fehler beim Laden der Modelle:", error);
                     showPopup("Fehler beim Laden der Modelle.", "error");
                 }
@@ -448,18 +466,24 @@
                     );
                 });
 
-                if (websearchResults && websearchResults.quellen && websearchResults.quellen.length > 0) {
-                    const urlsHtml = websearchResults.quellen.map(url => 
-                        `<a href="${url}" target="_blank" class="websearch-url">${url}</a>`
-                    ).join('<br>');
-                    formattedContent += `<div class="websearch-results"><strong>Websearch Quellen:</strong><br>${urlsHtml}</div>`;
+                if (websearchResults && websearchResults.quellen && Array.isArray(websearchResults.quellen)) {
+                    const urlsHtml = websearchResults.quellen
+                        .filter(url => url && typeof url === 'string' && url.startsWith('http'))
+                        .map(url => `<a href="${url}" target="_blank" class="websearch-url">${url}</a>`)
+                        .join('<br>');
+                    if (urlsHtml) {
+                        formattedContent += `<div class="websearch-results"><strong>Websearch Quellen:</strong><br>${urlsHtml}</div>`;
+                    }
                 }
 
-                if (deepsearchResults && deepsearchResults.quellen && deepsearchResults.quellen.length > 0) {
-                    const urlsHtml = deepsearchResults.quellen.map(url => 
-                        `<a href="${url}" target="_blank" class="deepsearch-url">${url}</a>`
-                    ).join('<br>');
-                    formattedContent += `<div class="deepsearch-results"><strong>Deepsearch Quellen:</strong><br>${urlsHtml}</div>`;
+                if (deepsearchResults && deepsearchResults.quellen && Array.isArray(deepsearchResults.quellen)) {
+                    const urlsHtml = deepsearchResults.quellen
+                        .filter(url => url && typeof url === 'string' && url.startsWith('http'))
+                        .map(url => `<a href="${url}" target="_blank" class="deepsearch-url">${url}</a>`)
+                        .join('<br>');
+                    if (urlsHtml) {
+                        formattedContent += `<div class="deepsearch-results"><strong>Deepsearch Quellen:</strong><br>${urlsHtml}</div>`;
+                    }
                 }
                 
                 return formattedContent;
@@ -545,6 +569,7 @@
                     let response;
 
                     if (activeFeature === 'Websearch') {
+                        console.log('Sending Websearch request');
                         response = await authenticatedFetch('/api/websearch', {
                             method: 'POST',
                             headers: { 'X-Chat-ID': currentChatId || '' },
@@ -552,6 +577,7 @@
                             signal: abortController.signal
                         });
                     } else if (activeFeature === 'DeepSearch') {
+                        console.log('Sending DeepSearch request');
                         response = await authenticatedFetch('/api/deepsearch', {
                             method: 'POST',
                             headers: { 'X-Chat-ID': currentChatId || '' },
@@ -559,6 +585,7 @@
                             signal: abortController.signal
                         });
                     } else {
+                        console.log('Sending standard chat request');
                         response = await authenticatedFetch('/api/chat/send', {
                             method: 'POST',
                             headers: { 'X-Chat-ID': currentChatId || '' },
@@ -571,7 +598,7 @@
                         let errText = 'Fehler vom Server';
                         try {
                             const errJson = await response.json();
-                            errText = errJson.message || JSON.stringify(errJson);
+                            errText = errJson.details || errJson.message || JSON.stringify(errJson);
                         } catch {
                             try { errText = await response.text(); } catch (_) {}
                         }
@@ -597,7 +624,7 @@
                                 lastUserMsg.innerHTML += `<br><strong>Unangemessen!</strong>`;
                             }
                         } else if (data && data.type === 'error') {
-                            throw new Error(data.message || 'Serverfehler');
+                            throw new Error(data.details || data.message || 'Serverfehler');
                         } else {
                             if (data && data.message) {
                                 showPopup(data.message, 'success');
@@ -649,14 +676,14 @@
                                 loadChatList();
                                 loadUserInfo();
                                 streamEnded = true;
-                                // Deaktiviere das Feature nach Abschluss
                                 if (activeFeature) {
-                                    document.getElementById(`${activeFeature.toLowerCase()}Btn`).classList.remove('active');
+                                    document.getElementById(buttonIdMap[activeFeature]).classList.remove('active');
+                                    showPopup(`${activeFeature} deaktiviert.`, 'info');
                                     activeFeature = null;
                                 }
                                 break;
                             } else if (data.type === 'error') {
-                                throw new Error(data.message || 'Fehler vom Server im Stream');
+                                throw new Error(data.details || data.message || 'Fehler vom Server im Stream');
                             }
                         }
                         if (streamEnded) break;

@@ -7,7 +7,7 @@
       "password": "$2a$10$dZ4Q7OoHXjl4prekZ.JvXe9TAWKWW8k4FTUD1xQfWBfWpCqN7EWAO",
       "firstName": "System",
       "max-tokens": "--",
-      "used-tokens": 13692,
+      "used-tokens": 17857,
       "admin": true,
       "profile": {
         "personal-ai-prompt": "Ich bin der Systemadministrator und verwalte diese Plattform.",
