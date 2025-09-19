@@ -719,7 +719,7 @@ app.post('/api/websearch', authenticateUser, async (req, res) => {
         // Sende initiales Progress-Event
         res.write(JSON.stringify({
             type: 'progress',
-            message: 'Websearch läuft...',
+            message: 'Websearch läuft',
             done: false
         }) + '\n');
         if (typeof res.flush === 'function') res.flush();
@@ -971,6 +971,7 @@ app.post('/api/deepsearch', authenticateUser, async (req, res) => {
     let keepAliveInterval = null;
 
     try {
+        // Setze Timeouts für die Verbindung
         res.setTimeout(600000);
         req.socket.setTimeout(600000);
         res.connection.setTimeout(600000);
@@ -988,6 +989,7 @@ app.post('/api/deepsearch', authenticateUser, async (req, res) => {
             return res.status(403).json({ message: 'Daily token limit reached.' });
         }
 
+        // Chat-Verwaltung
         currentChat = chats.chats.find(c => c.id === chatId && c.user_id === req.userId);
         let isNewChat = false;
 
@@ -1018,6 +1020,7 @@ app.post('/api/deepsearch', authenticateUser, async (req, res) => {
         const ollamaPort = config.ollama.port;
         const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
 
+        // Setze Response-Header für Streaming
         res.writeHead(200, {
             'Content-Type': 'text/plain; charset=utf-8',
             'Transfer-Encoding': 'chunked',
@@ -1029,14 +1032,14 @@ app.post('/api/deepsearch', authenticateUser, async (req, res) => {
         // Initiales Progress-Event
         res.write(JSON.stringify({
             type: 'progress',
-            message: 'Deepsearch läuft...',
+            message: 'Deepsearch Startet... Das kann einige Minuten dauern.',
             done: false
         }) + '\n');
         res.flush?.();
 
         // Keep-Alive: Alle 30 Sekunden
         keepAliveInterval = setInterval(() => {
-            const keepAlivePayload = { type: 'progress', message: 'DeepSearch läuft, bitte warten...', done: false };
+            const keepAlivePayload = { type: 'progress', message: 'DeepSearch läuft, Das kann einige Minuten dauern.', done: false };
             console.log('Sending keep-alive:', keepAlivePayload);
             res.write(JSON.stringify(keepAlivePayload) + '\n');
             res.flush?.();
@@ -1081,13 +1084,13 @@ Nutzer-Eingabe: ${message}`;
         const keywordData = await keywordResponse.json();
         let keywordTerms;
         try {
-            if (!keywordData.message || !keywordData.message.content) {
+            if (!keywordData || typeof keywordData !== 'object' || !keywordData.message || !keywordData.message.content) {
                 throw new Error('Ollama response is empty or missing message content');
             }
-            let cleanedResponse = searchTermData.message.content
-                .replace(/```json\n([\s\S]*?)\n```/g, '$1') // Match ```json\n{content}\n``` and keep content
-                .replace(/```([\s\S]*?)```/g, '$1') // Match any other ```{content}``` and keep content
-               .trim();
+            let cleanedResponse = keywordData.message.content
+                .replace(/```json\n([\s\S]*?)\n```/g, '$1') // Entferne ```json```-Blöcke
+                .replace(/```([\s\S]*?)```/g, '$1') // Entferne andere ```-Blöcke
+                .trim();
             keywordTerms = JSON.parse(cleanedResponse);
             if (!keywordTerms.stichwort || typeof keywordTerms.stichwort !== 'string' || !keywordTerms.model) {
                 throw new Error('Ollama response does not match expected format: Must contain exactly 1 keyword and a model');
@@ -1335,7 +1338,7 @@ app.post('/api/codeinterpreter', authenticateUser, async (req, res) => {
         // Progress-Event senden
         res.write(JSON.stringify({
             type: 'progress',
-            message: 'Code wird ausgeführt...',
+            message: 'Code wird ausgeführt',
             done: false
         }) + '\n');
         if (typeof res.flush === 'function') res.flush();
@@ -1426,7 +1429,7 @@ Benutzeranfrage: ${message}`;
         // Progress-Event für Codeausführung
         res.write(JSON.stringify({
             type: 'progress',
-            message: `Führe ${codeExecutionData.language} Code aus...`
+            message: `Führe ${codeExecutionData.language} Code aus`
         }) + '\n');
         if (typeof res.flush === 'function') res.flush();
 
