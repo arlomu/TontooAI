@@ -63,6 +63,8 @@ sudo bash setup.sh
 Open your browser at [https://localhost](https://localhost)
 Or at Port 8080 As Seccond Server
 
+Login with Default Login: Passsword "admin123" Username "admin"
+
 ---
 
 ## License
