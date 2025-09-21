@@ -73,9 +73,7 @@ MIT License © 2025
 
 ---
 
-## Contact
+## More
 
-* GitHub Issues: [https://github.com/your-username/ollama-web-ui/issues](https://github.com/your-username/ollama-web-ui/issues)
-* Email: [your@email.com](mailto:your@email.com)
-
-Contact Comming Soon!
+* Bug Issues: [https://github.com/arlomu/TontooAI/issues/new?template=bug_report.md](https://github.com/arlomu/TontooAI/issues/new?template=bug_report.md)
+* Feature Request: [https://github.com/arlomu/TontooAI/issues/new?template=feature_request.md](https://github.com/arlomu/TontooAI/issues/new?template=feature_request.md)
