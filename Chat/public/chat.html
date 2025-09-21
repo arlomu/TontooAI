@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,19 +11,19 @@
     <div class="main-layout">
         <div class="sidebar" id="chatSidebar">
             <div class="chat-sidebar-header">
-                <img src="/icon.png" alt="Beschreibung des Icons" width="52" height="52">
+                <img src="/icon.png" alt="Icon description" width="52" height="52">
                 <button id="newChatBtn"><span style="font-size:30px;">+</span><span id="newChatBtnText" style="font-size:20px;"></span></button>
                 <p id="toggleSidebarBtn" title=""></p>
             </div>
             <div class="chat-list" id="chatList">
-                <!-- Chat-Liste wird hier dynamisch geladen -->
+                <!-- Chat list will be dynamically loaded here -->
             </div>
         </div>
 
         <div class="content-area">
             <div class="chat-main">
                 <div class="chat-messages" id="chatMessages">
-                    <!-- Nachrichten werden hier dynamisch geladen -->
+                    <!-- Messages will be dynamically loaded here -->
                 </div>
                 <div class="loading-indicator" id="loadingIndicator">
                     <i class="fas fa-spinner fa-spin"></i><span id="loadingMessage"></span>
@@ -35,19 +35,18 @@
                         </button>
                         <div class="feature-menu" id="featureMenu">
                             <button class="feature-menu-item" id="codeInterpreterBtn" data-feature-type="Codeinterpreter">
-                                <i class="fas fa-code"></i>Codeinterpreter
+                                <i class="fas fa-code"></i><span id="codeInterpreterText"></span>
                             </button>
                             <button class="feature-menu-item" id="websearchBtn" data-feature-type="Websearch">
-                                <i class="fas fa-search"></i>Websearch
+                                <i class="fas fa-search"></i><span id="websearchText"></span>
                             </button>
                             <button class="feature-menu-item" id="deepSearchBtn" data-feature-type="DeepSearch">
-                                <i class="fas fa-search-plus"></i>DeepSearch
+                                <i class="fas fa-search-plus"></i><span id="deepSearchText"></span>
                             </button>
-                            <!-- NEU: Integrations-Button -->
                             <button class="feature-menu-item" id="integrationsMenuBtn" data-feature-type="Integrations">
-                                <i class="fas fa-plug"></i>Integrationen
+                                <i class="fas fa-plug"></i><span id="integrationsText"></span>
                                 <div class="integrations-submenu" id="integrationsSubmenu">
-                                    <!-- Integrationen werden hier dynamisch geladen -->
+                                    <!-- Integrations will be dynamically loaded here -->
                                 </div>
                             </button>
                         </div>
@@ -63,31 +62,32 @@
                 <i class="fas fa-user icon"></i>
                 <span id="userTokensSummary"></span>
                 <div class="user-info-popup" id="userInfoPopup">
-                    <p>⚡ genutzt: <span id="popupUsedTokens"></span></p>
-                    <p>⚡ Max: <span id="popupMaxTokens"></span></p>
-                    <button onclick="window.location.href='/settings.html'"><i class="fas fa-cog"></i> Einstellungen</button>
-                    <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Abmelden</button>
+                    <p><span id="usedTokensText"></span>: <span id="popupUsedTokens"></span></p>
+                    <p><span id="maxTokensText"></span>: <span id="popupMaxTokens"></span></p>
+                    <button onclick="window.location.href='/settings.html'"><i class="fas fa-cog"></i><span id="settingsBtnText"></span></button>
+                    <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i><span id="logoutBtnText"></span></button>
                 </div>
             </div>
         </div>
     </div>
     <div id="popupContainer"></div>
     <script>
-        // Globale Funktionen
+        // Global Functions
         window.copyCode = function(button) {
             const codeElement = button.closest('.code-block, .execution-code, .execution-output').querySelector('code');
             const textToCopy = codeElement.textContent;
             navigator.clipboard.writeText(textToCopy).then(() => {
                 button.innerHTML = '<i class="fas fa-check"></i>';
                 setTimeout(() => { button.innerHTML = '<i class="fas fa-copy"></i>'; }, 2000);
+                showPopup(lang.copied || 'Copied!', 'success');
             }).catch(err => {
-                console.error('Fehler beim Kopieren des Codes:', err);
-                showPopup('Fehler beim Kopieren des Codes.', 'error');
+                console.error('Error copying code:', err);
+                showPopup(lang.error || 'Error copying code.', 'error');
             });
         };
 
-        let activeFeature = null; // Can be 'Codeinterpreter', 'Websearch', 'DeepSearch', 'Integration'
-        let activeIntegrationId = null; // Only set if activeFeature is 'Integration'
+        let activeFeature = null; // Can be 'Codeinterpreter', 'Websearch', 'DeepSearch', 'Integrations'
+        let activeIntegrationId = null; // Only set if activeFeature is 'Integrations'
 
         function toggleFeature(featureName, integrationId = null) {
             console.log('Toggling feature:', featureName, 'Integration ID:', integrationId);
@@ -95,40 +95,40 @@
             const allFeatureButtons = document.querySelectorAll('.feature-menu-item');
             const integrationsSubmenuItems = document.querySelectorAll('.integration-submenu-item');
 
-            // Deaktiviere alle Features und Integrationen
+            // Deactivate all features and integrations
             allFeatureButtons.forEach(btn => btn.classList.remove('active'));
             integrationsSubmenuItems.forEach(item => item.classList.remove('active'));
             
-            // Wenn das gleiche Feature/Integration erneut ausgewählt wird, deaktiviere es
+            // If the same feature/integration is selected again, deactivate it
             if (activeFeature === featureName && activeIntegrationId === integrationId) {
                 activeFeature = null;
                 activeIntegrationId = null;
-                showPopup(`${featureName} deaktiviert.`, 'info');
+                showPopup(`${featureName} ${lang.disabled || 'disabled'}.`, 'info');
                 return;
             }
 
-            // Aktiviere das neue Feature/die neue Integration
+            // Activate the new feature/integration
             activeFeature = featureName;
             activeIntegrationId = integrationId;
 
             if (featureName === 'Integrations' && integrationId) {
-                // Aktiviere den Haupt-Integrations-Button und den spezifischen Submenü-Eintrag
+                // Activate the main integrations button and the specific submenu item
                 document.getElementById('integrationsMenuBtn')?.classList.add('active');
                 document.querySelector(`.integration-submenu-item[data-integration-id="${integrationId}"]`)?.classList.add('active');
-                showPopup(`Integration "${integrationId}" aktiviert.`, 'success');
+                showPopup(`${lang.integrations || 'Integration'} "${integrationId}" ${lang.enabled || 'enabled'}.`, 'success');
             } else {
-                // Aktiviere den spezifischen Feature-Button
+                // Activate the specific feature button
                 const buttonIdMap = {
                     'Codeinterpreter': 'codeInterpreterBtn',
                     'Websearch': 'websearchBtn',
                     'DeepSearch': 'deepSearchBtn'
                 };
                 document.getElementById(buttonIdMap[featureName])?.classList.add('active');
-                showPopup(`${featureName} aktiviert.`, 'success');
+                showPopup(`${featureName} ${lang.enabled || 'enabled'}.`, 'success');
             }
             
-            document.getElementById('featureMenu').classList.remove('active'); // Schließe das Hauptmenü
-            document.getElementById('integrationsSubmenu')?.classList.remove('active'); // Schließe das Integrations-Untermenü
+            document.getElementById('featureMenu').classList.remove('active'); // Close the main menu
+            document.getElementById('integrationsSubmenu')?.classList.remove('active'); // Close the integrations submenu
         }
 
         async function authenticatedFetch(url, options = {}) {
@@ -146,7 +146,7 @@
             if (response.status === 401 || response.status === 403) {
                 localStorage.removeItem('authToken');
                 window.location.href = '/login.html';
-                throw new Error('Nicht authentifiziert oder nicht autorisiert.');
+                throw new Error(lang.error_unauthorized || 'Not authenticated or unauthorized.');
             }
             return response;
         }
@@ -168,7 +168,7 @@
                     const res = await fetch(`/Lang_${langCode}.json`);
                     lang = await res.json();
                 } catch (error) {
-                    console.error('Fehler beim Laden der Sprachdatei:', error);
+                    console.error('Error loading language file:', error);
                 }
             }
             async function getUserLanguage() {
@@ -191,21 +191,29 @@
 
                 document.getElementById('newChatBtnText').textContent = lang.new_chat || 'New Chat';
                 document.getElementById('toggleSidebarBtn').title = lang.chat || 'Chat';
-                document.getElementById('messageInput').placeholder = lang.send || 'Nachricht eingeben...';
+                document.getElementById('messageInput').placeholder = lang.send || 'Enter message...';
+                document.getElementById('featureMenuBtn').title = lang.features || 'Features';
+                document.getElementById('codeInterpreterText').textContent = lang.code_interpreter || 'Code Interpreter';
+                document.getElementById('websearchText').textContent = lang.web_search || 'Web Search';
+                document.getElementById('deepSearchText').textContent = lang.deep_search || 'Deep Search';
+                document.getElementById('integrationsText').textContent = lang.integrations || 'Integrations';
+                document.getElementById('usedTokensText').textContent = lang.token_used || 'Used';
+                document.getElementById('maxTokensText').textContent = lang.max_tokens || 'Max';
+                document.getElementById('settingsBtnText').textContent = lang.settings || 'Settings';
+                document.getElementById('logoutBtnText').textContent = lang.logout || 'Logout';
             })();
 
             const featureMenuBtn = document.getElementById('featureMenuBtn');
             const featureMenu = document.getElementById('featureMenu');
-            const integrationsMenuBtn = document.getElementById('integrationsMenuBtn'); // NEU
-            const integrationsSubmenu = document.getElementById('integrationsSubmenu'); // NEU
+            const integrationsMenuBtn = document.getElementById('integrationsMenuBtn');
+            const integrationsSubmenu = document.getElementById('integrationsSubmenu');
             
             featureMenuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 featureMenu.classList.toggle('active');
-                integrationsSubmenu.classList.remove('active'); // Schließe Untermenü, wenn Hauptmenü geöffnet wird
+                integrationsSubmenu.classList.remove('active');
             });
             
-            // NEU: Event Listener für Integrations-Button
             integrationsMenuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 integrationsSubmenu.classList.toggle('active');
@@ -215,33 +223,29 @@
                 if (!featureMenu.contains(e.target) && e.target !== featureMenuBtn) {
                     featureMenu.classList.remove('active');
                 }
-                // NEU: Schließe Integrations-Untermenü, wenn außerhalb geklickt wird
                 if (!integrationsSubmenu.contains(e.target) && e.target !== integrationsMenuBtn) {
                     integrationsSubmenu.classList.remove('active');
                 }
             });
             
             featureMenu.addEventListener('click', (e) => {
-                // Wenn ein Feature-Button (außer Integrations-Button) geklickt wird
                 if (e.target.closest('.feature-menu-item') && !e.target.closest('#integrationsMenuBtn')) {
                     const featureType = e.target.closest('.feature-menu-item').dataset.featureType;
                     if (featureType) {
                         toggleFeature(featureType);
                     }
                 }
-                e.stopPropagation(); // Verhindert, dass das Hauptmenü sofort wieder schließt
+                e.stopPropagation();
             });
 
-            // NEU: Event Listener für die Integrationen im Untermenü
             integrationsSubmenu.addEventListener('click', (e) => {
                 const integrationItem = e.target.closest('.integration-submenu-item');
                 if (integrationItem) {
                     const integrationId = integrationItem.dataset.integrationId;
                     toggleFeature('Integrations', integrationId);
                 }
-                e.stopPropagation(); // Verhindert, dass das Untermenü sofort wieder schließt
+                e.stopPropagation();
             });
-
 
             const chatSidebar = document.getElementById('chatSidebar');
             const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
@@ -264,16 +268,16 @@
                 try {
                     const response = await fetch('/api/general-config');
                     const config = await response.json();
-                    document.getElementById('pageTitle').textContent = config['html-titel'].replace('%name', 'Chat');
+                    document.getElementById('pageTitle').textContent = config['html-titel'].replace('%name', lang.chat || 'Chat');
                 } catch (error) {
-                    console.error('Fehler beim Laden der allgemeinen Konfiguration:', error);
+                    console.error('Error loading general configuration:', error);
                 }
             })();
             
             async function loadUserInfo() {
                 try {
                     const response = await authenticatedFetch('/api/user/me');
-                    if (!response.ok) throw new Error('Benutzerdaten konnten nicht geladen werden.');
+                    if (!response.ok) throw new Error(lang.error_load_user || 'User data could not be loaded.');
                     const userData = await response.json();
                     const usedTokens = userData['used-tokens'] || 0;
                     const maxTokens = userData['max-tokens'] === '--' ? '∞' : userData['max-tokens'];
@@ -285,15 +289,16 @@
                     if (userData['max-tokens'] !== '--' && usedTokens >= parseInt(userData['max-tokens'])) {
                         messageInput.disabled = true;
                         sendMessageBtn.disabled = true;
-                        messageInput.placeholder = 'Tägliches Token-Limit erreicht.';
-                        showPopup('Ihr tägliches Token-Limit ist erreicht.', 'error');
+                        messageInput.placeholder = lang.token_limit_reached || 'Daily token limit reached.';
+                        showPopup(lang.token_limit_reached || 'Your daily token limit is reached.', 'error');
                     } else {
                         messageInput.disabled = false;
                         sendMessageBtn.disabled = false;
-                        messageInput.placeholder = 'Nachricht eingeben...';
+                        messageInput.placeholder = lang.send || 'Enter message...';
                     }
                 } catch (error) {
-                    console.error('Fehler beim Laden der Benutzerinfo:', error);
+                    console.error('Error loading user info:', error);
+                    showPopup(lang.error_load_user || 'Error loading user info.', 'error');
                 }
             }
 
@@ -304,8 +309,8 @@
                         window.location.href = '/login.html';
                     })
                     .catch(error => {
-                        console.error('Logout fehlgeschlagen:', error);
-                        showPopup('Logout fehlgeschlagen.', 'error');
+                        console.error('Logout failed:', error);
+                        showPopup(lang.error || 'Logout failed.', 'error');
                     });
             }
             logoutBtn.addEventListener('click', logout);
@@ -337,7 +342,7 @@
             async function loadChatList() {
                 try {
                     const response = await authenticatedFetch('/api/chats');
-                    if (!response.ok) throw new Error('Chat-Liste konnte nicht geladen werden.');
+                    if (!response.ok) throw new Error(lang.error || 'Chat list could not be loaded.');
                     const chats = await response.json();
                     chatList.innerHTML = '';
                     const sortedChats = chats.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -349,13 +354,14 @@
                         chatItem.innerHTML = `
                             <span class="chat-list-item-title">${chat.title}</span>
                             <div class="chat-list-item-actions">
-                                <button class="rename-chat-btn" data-chat-id="${chat.id}" title="Umbenennen"><i class="fas fa-edit"></i></button>
-                                <button class="delete-chat-btn danger" data-chat-id="${chat.id}" title="Löschen"><i class="fas fa-trash"></i></button>
+                                <button class="rename-chat-btn" data-chat-id="${chat.id}" title="${lang.rename || 'Rename'}"><i class="fas fa-edit"></i></button>
+                                <button class="delete-chat-btn danger" data-chat-id="${chat.id}" title="${lang.delete || 'Delete'}"><i class="fas fa-trash"></i></button>
                             </div>`;
                         chatList.appendChild(chatItem);
                     });
                 } catch (error) {
-                    console.error('Fehler beim Laden der Chat-Liste:', error);
+                    console.error('Error loading chat list:', error);
+                    showPopup(lang.error || 'Error loading chat list.', 'error');
                 }
             }
 
@@ -384,17 +390,17 @@
                 document.querySelector(`.chat-list-item[data-chat-id="${chatId}"]`)?.classList.add('active');
                 try {
                     const response = await authenticatedFetch(`/api/chats/${chatId}`);
-                    if (!response.ok) throw new Error('Chat-Verlauf konnte nicht geladen werden.');
+                    if (!response.ok) throw new Error(lang.error || 'Chat history could not be loaded.');
                     const chatData = await response.json();
                     renderChatMessages(chatData.messages);
                 } catch (error) {
-                    console.error('Fehler beim Laden des Chat-Verlaufs:', error);
-                    showPopup('Fehler beim Laden des Chat-Verlaufs.', 'error');
+                    console.error('Error loading chat history:', error);
+                    showPopup(lang.error || 'Error loading chat history.', 'error');
                 }
             }
 
             async function renameChat(chatId) {
-                const newTitle = prompt('Neuen Chat-Namen eingeben:');
+                const newTitle = prompt(lang.rename || 'Enter new chat name:');
                 if (newTitle && newTitle.trim()) {
                     try {
                         await authenticatedFetch(`/api/chats/${chatId}/rename`, {
@@ -403,13 +409,13 @@
                         });
                         loadChatList();
                     } catch (error) {
-                        showPopup('Fehler beim Umbenennen.', 'error');
+                        showPopup(lang.error || 'Error renaming chat.', 'error');
                     }
                 }
             }
 
             async function deleteChat(chatId) {
-                if (confirm('Sind Sie sicher, dass Sie diesen Chat löschen möchten?')) {
+                if (confirm(lang.confirm_delete_chat || 'Are you sure you want to delete this chat?')) {
                     try {
                         await authenticatedFetch(`/api/chats/${chatId}`, { method: 'DELETE' });
                         if (currentChatId === chatId) {
@@ -418,7 +424,7 @@
                         }
                         loadChatList();
                     } catch (error) {
-                        showPopup('Fehler beim Löschen.', 'error');
+                        showPopup(lang.error || 'Error deleting chat.', 'error');
                     }
                 }
             }
@@ -426,14 +432,14 @@
             async function loadModels() {
                 try {
                     const response = await authenticatedFetch('/api/models');
-                    if (!response.ok) throw new Error('Modelle konnten nicht geladen werden.');
+                    if (!response.ok) throw new Error(lang.error_load_models || 'Models could not be loaded.');
                     const models = await response.json();
                     modelSelector.innerHTML = '';
                     if (Object.keys(models).length === 0) {
-                        modelSelector.innerHTML = '<option value="">Keine Modelle verfügbar</option>';
+                        modelSelector.innerHTML = `<option value="">${lang.no_models || 'No models available'}</option>`;
                         sendMessageBtn.disabled = true;
                         messageInput.disabled = true;
-                        messageInput.placeholder = "Keine Modelle konfiguriert.";
+                        messageInput.placeholder = lang.no_models_configured || 'No models configured.';
                     } else {
                         for (const modelId in models) {
                             const option = document.createElement('option');
@@ -443,21 +449,20 @@
                         }
                     }
                 } catch (error) {
-                    console.error("Fehler beim Laden der Modelle:", error);
-                    showPopup("Fehler beim Laden der Modelle.", "error");
+                    console.error('Error loading models:', error);
+                    showPopup(lang.error_load_models || 'Error loading models.', 'error');
                 }
             }
 
-            // NEU: Integrationen laden und im Menü anzeigen
             async function loadIntegrationsUI() {
                 try {
                     const response = await authenticatedFetch('/api/integrations');
-                    if (!response.ok) throw new Error('Integrationen konnten nicht geladen werden.');
+                    if (!response.ok) throw new Error(lang.error || 'Integrations could not be loaded.');
                     const integrations = await response.json();
-                    integrationsSubmenu.innerHTML = ''; // Clear previous items
+                    integrationsSubmenu.innerHTML = '';
 
                     if (integrations.length === 0) {
-                        integrationsSubmenu.innerHTML = '<div class="integration-submenu-item disabled">Keine Integrationen gefunden</div>';
+                        integrationsSubmenu.innerHTML = `<div class="integration-submenu-item disabled">${lang.no_integrations || 'No integrations found'}</div>`;
                     } else {
                         integrations.forEach(integration => {
                             const integrationItem = document.createElement('button');
@@ -468,11 +473,10 @@
                         });
                     }
                 } catch (error) {
-                    console.error("Fehler beim Laden der Integrationen:", error);
-                    showPopup("Fehler beim Laden der Integrationen.", "error");
+                    console.error('Error loading integrations:', error);
+                    showPopup(lang.error || 'Error loading integrations.', 'error');
                 }
             }
-
 
             async function stopGeneration() {
                 if (!isGeneratingResponse) return;
@@ -493,8 +497,8 @@
                         loadingIndicator.classList.remove('active');
                     }
                 } catch (error) {
-                    console.error('Fehler beim Stoppen der Generation:', error);
-                    showPopup('Fehler beim Stoppen.', 'error');
+                    console.error('Error stopping generation:', error);
+                    showPopup(lang.error || 'Error stopping generation.', 'error');
                 }
             }
 
@@ -555,7 +559,7 @@
                         .map(url => `<a href="${url}" target="_blank" class="websearch-url">${url}</a>`)
                         .join('<br>');
                     if (urlsHtml) {
-                        formattedContent += `<div class="websearch-results"><strong>Websearch Quellen:</strong><br>${urlsHtml}</div>`;
+                        formattedContent += `<div class="websearch-results"><strong>${lang.web_search_results || 'Web Search Sources'}:</strong><br>${urlsHtml}</div>`;
                     }
                 }
 
@@ -565,7 +569,7 @@
                         .map(url => `<a href="${url}" target="_blank" class="deepsearch-url">${url}</a>`)
                         .join('<br>');
                     if (urlsHtml) {
-                        formattedContent += `<div class="deepsearch-results"><strong>Deepsearch Quellen:</strong><br>${urlsHtml}</div>`;
+                        formattedContent += `<div class="deepsearch-results"><strong>${lang.deep_search_results || 'Deep Search Sources'}:</strong><br>${urlsHtml}</div>`;
                     }
                 }
 
@@ -574,32 +578,32 @@
                     try {
                         parsedResults = typeof codeExecutionResults === 'string' ? JSON.parse(codeExecutionResults) : codeExecutionResults;
                     } catch (e) {
-                        console.error('Fehler beim Parsen der Codeausführungsergebnisse:', e, codeExecutionResults);
+                        console.error('Error parsing code execution results:', e, codeExecutionResults);
                         return formattedContent;
                     }
 
                     if (!parsedResults || !parsedResults.code) {
-                        console.warn('Keine gültigen Codeausführungsergebnisse:', parsedResults);
+                        console.warn('No valid code execution results:', parsedResults);
                         return formattedContent;
                     }
 
                     const packages = parsedResults.packages || [];
                     const packagesHtml = packages.length > 0 
                         ? `<div class="packages-list">${packages.map(pkg => `<span class="package-tag">${pkg}</span>`).join(' ')}</div>`
-                        : '<span>Keine</span>';
+                        : `<span>${lang.none || 'None'}</span>`;
 
                     const status = parsedResults.status || (parsedResults.output ? 'success' : parsedResults.error ? 'error' : 'unknown');
                     const statusClass = status === 'success' ? 'status-success' : 'status-error';
                     const outputClass = status === 'success' ? 'execution-output' : 'execution-output execution-error';
-                    const output = parsedResults.output || parsedResults.error || 'Keine Ausgabe verfügbar';
+                    const output = parsedResults.output || parsedResults.error || (lang.no_output || 'No output available');
 
                     formattedContent += `
                         <div class="codeexecution-results">
                             <div class="execution-header">
                                 <div class="execution-title">
-                                    <i class="fas fa-code"></i> Code Ausführung
+                                    <i class="fas fa-code"></i> ${lang.code_execution || 'Code Execution'}
                                 </div>
-                                <div class="execution-language">${parsedResults.language || 'Unbekannt'}</div>
+                                <div class="execution-language">${parsedResults.language || lang.unknown || 'Unknown'}</div>
                             </div>
                             
                             <div class="execution-status ${statusClass}">
@@ -608,46 +612,44 @@
                             
                             <div class="execution-info">
                                 <div class="execution-info-item">
-                                    <strong>Sprache:</strong>
-                                    <span>${parsedResults.language || 'Unbekannt'} ${parsedResults.version || ''}</span>
+                                    <strong>${lang.language || 'Language'}:</strong>
+                                    <span>${parsedResults.language || lang.unknown || 'Unknown'} ${parsedResults.version || ''}</span>
                                 </div>
                                 <div class="execution-info-item">
-                                    <strong>Internet:</strong>
-                                    <span>${parsedResults.internet === 'true' ? 'Aktiviert' : 'Deaktiviert'}</span>
+                                    <strong>${lang.internet || 'Internet'}:</strong>
+                                    <span>${parsedResults.internet === 'true' ? lang.enabled || 'Enabled' : lang.disabled || 'Disabled'}</span>
                                 </div>
                                 <div class="execution-info-item">
-                                    <strong>Pakete:</strong>
+                                    <strong>${lang.packages || 'Packages'}:</strong>
                                     ${packagesHtml}
                                 </div>
-                                ${parsedResults.description ? `<div class="execution-info-item"><strong>Beschreibung:</strong><span>${escapeHtml(parsedResults.description)}</span></div>` : ''}
+                                ${parsedResults.description ? `<div class="execution-info-item"><strong>${lang.description || 'Description'}:</strong><span>${escapeHtml(parsedResults.description)}</span></div>` : ''}
                             </div>
                             
                             <div class="execution-code">
-                                <div class="code-header"><span>${parsedResults.language || 'Code'}</span><button onclick="copyCode(this)"><i class="fas fa-copy"></i></button></div>
+                                <div class="code-header"><span>${parsedResults.language || lang.code || 'Code'}</span><button onclick="copyCode(this)"><i class="fas fa-copy"></i></button></div>
                                 <pre><code class="language-${parsedResults.language || 'text'}">${escapeHtml(parsedResults.code)}</code></pre>
                             </div>
                             
                             <div class="${outputClass}">
-                                <div class="code-header"><span>Ausgabe</span><button onclick="copyCode(this)"><i class="fas fa-copy"></i></button></div>
+                                <div class="code-header"><span>${lang.output || 'Output'}</span><button onclick="copyCode(this)"><i class="fas fa-copy"></i></button></div>
                                 <pre><code>${escapeHtml(output)}</code></pre>
                             </div>
                         </div>
                     `;
                 }
 
-                // NEU: Integration Results
                 if (integrationResults) {
                     formattedContent += `
                         <div class="integration-results">
                             <div class="integration-header">
-                                <i class="fas fa-plug"></i> Integration: <strong>${integrationResults.integrationName || 'Unbekannt'}</strong>
+                                <i class="fas fa-plug"></i> ${lang.integrations || 'Integration'}: <strong>${integrationResults.integrationName || lang.unknown || 'Unknown'}</strong>
                             </div>
                             <div class="integration-details">
-                                <p>Die Integration hat externe APIs aufgerufen, um Informationen zu sammeln.</p>
-                                <!-- Optional: Anzeige der API-Outputs für Debugging -->
+                                <p>${lang.integration_message || 'The integration has called external APIs to gather information.'}</p>
                                 ${integrationResults.apiOutputs ? `
                                     <div class="integration-api-outputs">
-                                        <strong>API-Antworten:</strong>
+                                        <strong>${lang.api_responses || 'API Responses'}:</strong>
                                         ${Object.keys(integrationResults.apiOutputs).map(key => `
                                             <div class="integration-api-output-item">
                                                 <span>${key}:</span>
@@ -669,7 +671,7 @@
                 messageElement.classList.add('chat-message', message.sender);
                 messageElement.dataset.messageId = message.id;
 
-                const iconHtml = message.sender === 'user' ? 'DU' : '<img src="/icon.png" alt="AI Icon" width="32" height="32">';
+                const iconHtml = message.sender === 'user' ? 'YOU' : '<img src="/icon.png" alt="AI Icon" width="32" height="32">';
                 const infoHtml = message.sender === 'ai' && message.tokens !== undefined
                     ? `<div class="chat-message-info">⚡ ${message.tokens} ⌛ ${message.time}s</div>`
                     : '';
@@ -679,7 +681,7 @@
                     message.websearchResults, 
                     message.deepsearchResults,
                     message.codeexecution_results || message.codeExecutionResults,
-                    message.integrationResults // NEU
+                    message.integrationResults
                 );
 
                 messageElement.innerHTML = `
@@ -741,7 +743,7 @@
             async function sendMessage() {
                 const content = messageInput.value.trim();
                 if (!content || isGeneratingResponse) {
-                    console.warn('SendMessage abgebrochen: Entweder kein Inhalt oder Generierung läuft bereits.');
+                    console.warn('SendMessage aborted: Either no content or generation is already running.');
                     return;
                 }
 
@@ -757,21 +759,21 @@
                     content 
                 });
 
-                let loadingMessageText = 'KI antwortet...';
+                let loadingMessageText = lang.ai_responding || 'AI is responding...';
                 let apiUrl = '/api/chat/send';
                 let requestBody = { message: content, model: modelSelector.value };
 
                 if (activeFeature === 'Codeinterpreter') {
-                    loadingMessageText = 'Code wird ausgeführt...';
+                    loadingMessageText = lang.code_running || 'Code is running...';
                     apiUrl = '/api/codeinterpreter';
                 } else if (activeFeature === 'Websearch') {
-                    loadingMessageText = 'Websearch läuft...';
+                    loadingMessageText = lang.web_search_running || 'Web search is running...';
                     apiUrl = '/api/websearch';
                 } else if (activeFeature === 'DeepSearch') {
-                    loadingMessageText = 'Deepsearch läuft...';
+                    loadingMessageText = lang.deep_search_running || 'Deep search is running...';
                     apiUrl = '/api/deepsearch';
-                } else if (activeFeature === 'Integrations' && activeIntegrationId) { // NEU
-                    loadingMessageText = `Integration "${activeIntegrationId}" wird ausgeführt...`;
+                } else if (activeFeature === 'Integrations' && activeIntegrationId) {
+                    loadingMessageText = `${lang.integrations || 'Integration'} "${activeIntegrationId}" ${lang.running || 'is running...'}`;
                     apiUrl = '/api/integrate';
                     requestBody.integrationId = activeIntegrationId;
                 }
@@ -783,7 +785,7 @@
                     let response;
 
                     const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Request-Timeout nach 10 Minuten')), 600000)
+                        setTimeout(() => reject(new Error(lang.timeout_error || 'Request timeout after 10 minutes')), 600000)
                     );
 
                     response = await Promise.race([
@@ -797,7 +799,7 @@
                     ]);
 
                     if (!response.ok) {
-                        let errText = 'Fehler vom Server';
+                        let errText = lang.error || 'Server error';
                         try {
                             const errJson = await response.json();
                             errText = errJson.details || errJson.message || JSON.stringify(errJson);
@@ -815,7 +817,7 @@
                             data = await response.json();
                         } catch (e) {
                             const text = await response.text().catch(() => '');
-                            throw new Error(text || 'Ungültige Server-Antwort.');
+                            throw new Error(text || lang.invalid_response || 'Invalid server response.');
                         }
 
                         if (data && data.type === 'guard' && data.allowed === false) {
@@ -823,10 +825,10 @@
                             if (lastUserMsg) {
                                 lastUserMsg.style.background = '#FF4444';
                                 lastUserMsg.style.color = '#fff';
-                                lastUserMsg.innerHTML += `<br><strong>Unangemessen!</strong>`;
+                                lastUserMsg.innerHTML += `<br><strong>${lang.inappropriate || 'Inappropriate!'}</strong>`;
                             }
                         } else if (data && data.type === 'error') {
-                            throw new Error(data.details || data.message || 'Serverfehler');
+                            throw new Error(data.details || data.message || lang.server_error || 'Server error');
                         } else {
                             if (data && data.message) {
                                 showPopup(data.message, 'success');
@@ -849,7 +851,7 @@
                     let websearchResults = null;
                     let deepsearchResults = null;
                     let codeExecutionResults = null;
-                    let integrationResults = null; // NEU
+                    let integrationResults = null;
                     let buffer = '';
                     
                     try {
@@ -873,7 +875,7 @@
                                 try {
                                     data = JSON.parse(trimmedLine);
                                 } catch (parseError) {
-                                    console.warn('Konnte Stream-Zeile nicht parsen:', trimmedLine, parseError);
+                                    console.warn('Could not parse stream line:', trimmedLine, parseError);
                                     continue;
                                 }
 
@@ -895,18 +897,16 @@
                                     codeExecutionResults = data.codeExecutionResults;
                                     updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     hideLoadingIndicator();
-                                } else if (data.type === 'integration') { // NEU
+                                } else if (data.type === 'integration') {
                                     integrationResults = data.integrationResults;
                                     updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     hideLoadingIndicator();
-                                }
-                                else if (data.type === 'end') {
+                                } else if (data.type === 'end') {
                                     updateLastAiMessage('', true, { tokens: data.tokens, time: data.time }, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     if (data.isNewChat) currentChatId = data.chatId;
                                     loadChatList();
                                     loadUserInfo();
                                     streamEnded = true;
-                                    // Deaktiviere das aktive Feature/Integration nach Abschluss
                                     if (activeFeature) {
                                         const buttonIdMap = {
                                             'Codeinterpreter': 'codeInterpreterBtn',
@@ -916,32 +916,32 @@
                                         };
                                         document.getElementById(buttonIdMap[activeFeature])?.classList.remove('active');
                                         document.querySelector(`.integration-submenu-item[data-integration-id="${activeIntegrationId}"]`)?.classList.remove('active');
-                                        showPopup(`${activeFeature} deaktiviert.`, 'info');
+                                        showPopup(`${activeFeature} ${lang.disabled || 'disabled'}.`, 'info');
                                         activeFeature = null;
                                         activeIntegrationId = null;
                                     }
                                     hideLoadingIndicator();
                                     break;
                                 } else if (data.type === 'error') {
-                                    throw new Error(data.details || data.message || 'Fehler vom Server im Stream');
+                                    throw new Error(data.details || data.message || lang.error || 'Server error in stream');
                                 }
                             }
 
                             if (streamEnded) break;
                         }
                     } catch (streamError) {
-                        if (streamError.name !== 'AbortError' && streamError.message !== 'Request-Timeout nach 10 Minuten') {
-                            console.error('Stream-Fehler:', streamError);
-                            updateLastAiMessage(`\n\n**Fehler:** ${streamError.message}`, false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
+                        if (streamError.name !== 'AbortError' && streamError.message !== (lang.timeout_error || 'Request timeout after 10 minutes')) {
+                            console.error('Stream error:', streamError);
+                            updateLastAiMessage(`\n\n**${lang.error || 'Error'}:** ${streamError.message}`, false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                         }
                     } finally {
                         reader.releaseLock();
                     }
 
                 } catch (error) {
-                    if (error.name !== 'AbortError' && error.message !== 'Request-Timeout nach 10 Minuten') {
-                        console.error('Fehler bei der KI-Antwort:', error);
-                        updateLastAiMessage(`\n\n**Fehler:** ${error.message}`, false, {}, null, null, null, null);
+                    if (error.name !== 'AbortError' && error.message !== (lang.timeout_error || 'Request timeout after 10 minutes')) {
+                        console.error('Error in AI response:', error);
+                        updateLastAiMessage(`\n\n**${lang.error || 'Error'}:** ${error.message}`, false, {}, null, null, null, null);
                     }
                 } finally {
                     isGeneratingResponse = false;
@@ -975,7 +975,7 @@
             loadUserInfo();
             loadChatList();
             loadModels();
-            loadIntegrationsUI(); // NEU: Integrationen beim Start laden
+            loadIntegrationsUI();
         });
     </script>
 </body>

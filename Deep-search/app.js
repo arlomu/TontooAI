@@ -173,7 +173,7 @@ Antworte NUR mit Text in Deutsch, ohne Markdown oder zusätzlichen Text.
 
     // 5. Finale Zusammenfassung
     const finalPrompt = `
-Fasse die folgenden 3 Zusammenfassungen zusammen und erstelle eine detaillierte, gut lesbare Version (max. 300 Wörter):
+Fasse die folgenden 3 Zusammenfassungen zusammen und erstelle eine detaillierte, gut lesbare Version (max. 700 Wörter):
 
 ${blockSummaries.map((s, i) => `Block ${i + 1}:\n${s}`).join("\n\n")}
 

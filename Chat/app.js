@@ -1601,7 +1601,7 @@ Nutzer-Eingabe: ${message}`;
 
         const finalMessages = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Der user hat Deepsearch angefragt mit text: ${message}\n\nDeepsearch Zusammenfassung: ${zusammenfassung}` }
+            { role: 'user', content: `Der user hat die Deepsearch gestartet mit: ${message}\n\nDeepsearch Ergebniss: ${zusammenfassung} Gebe dem User so viele Infos wie möglich die du bekommen hast!` }
         ];
 
         const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
