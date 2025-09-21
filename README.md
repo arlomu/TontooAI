@@ -15,9 +15,13 @@ A **Ollama** Web UI build in NodeJS, easy to Setup
 
 Build in
 
-**Code Interpreter Support Python, NodeJS, Support Evry Model**
-**Websearch, Support Evry Model**
-**Deepsearch, Support Evry Model** Dont Work right now i Fixing it!
+**Code Interpreter Support Python, NodeJS**
+**Websearch**
+**Deepsearch**
+**Intergrations**
+
+```Info
+All work with evry Model```
 
 ---
 

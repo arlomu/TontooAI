@@ -798,7 +798,7 @@ app.post('/api/websearch', authenticateUser, async (req, res) => {
         // Sende initiales Progress-Event
         res.write(JSON.stringify({
             type: 'progress',
-            message: 'Websearch läuft',
+            message: 'Searching the Web',
             done: false
         }) + '\n');
         if (typeof res.flush === 'function') res.flush();
@@ -816,7 +816,7 @@ Beispiel für die Eingabe "Apfel":
     "suchworter": ["Äpfel", "Apfelbaum", "Apfelkuchen"],
     "model": "${ollamaModel}"
 }
-Nutzer-Eingabe: ${message}`;
+Nutzer-Eingabe: ${message} hallte dich an 3 Begriffe! nicht mehr!`;
 
         const ollamaMessages = [
             { role: 'system', content: websearchPrompt },
@@ -905,7 +905,7 @@ Nutzer-Eingabe: ${message}`;
 
         const finalMessages = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Der user hat die Websearch benutzt mit anfrage: ${message}\n\nWebsearch Zusammenfassung: ${zusammenfassung}` }
+            { role: 'user', content: `Der user hat die Websearch benutzt mit anfrage: ${message}\n\nWebsearch Zusammenfassung: ${zusammenfassung} Berücksichtige die Sprache des Users!` }
         ];
 
         const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
@@ -1601,7 +1601,7 @@ Nutzer-Eingabe: ${message}`;
 
         const finalMessages = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Der user hat die Deepsearch gestartet mit: ${message}\n\nDeepsearch Ergebniss: ${zusammenfassung} Gebe dem User so viele Infos wie möglich die du bekommen hast!` }
+            { role: 'user', content: `Der user hat die Deepsearch gestartet mit: ${message}\n\nDeepsearch Ergebniss: ${zusammenfassung} Gebe dem User so viele Infos wie möglich die du bekommen hast! & Berüksichtige die Sprache des Users` }
         ];
 
         const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
@@ -1822,15 +1822,16 @@ antworte AUSSCHLIESSLICH mit einem JSON-Objekt in folgendem Format keine Erklär
     "internet": "false",
     "packages": ["requests", "numpy"],
     "version": "3",
-    "description": "Kurze Beschreibung was der Code macht"
+    "description": "a Small Description of what the code does"
 }
 \`\`\`
 
-Unterstützte Sprachen: "python", "nodejs"
-Internet: "true" oder "false" (standardmäßig "false")
-Version: Bei Python "3", bei Node.js die gewünschte Version
+Provide Code Lanuage: "python", "nodejs"
+Internet: "true" oder "false" (default "false")
+Versions: Python "3", Node.js The Wanted Version
 
-Berücksichtige den folgenden Chat-Verlauf, um die Anfrage im Kontext zu verstehen
+Make shure you get The Chat History and the User Prompt to understand what the user wants.
+Do The Description in the users language.
 
 Benutzeranfrage: ${message}`;
 
@@ -1928,7 +1929,7 @@ Sprache: ${codeExecutionData.language}
 Status: ${codeResult.status}
 ${codeResult.output ? `Ausgabe: ${codeResult.output}` : `Fehler: ${codeResult.message || 'Unbekannter Fehler'}`}
 
-Erkläre dem Benutzer das Ergebnis auf eine verständliche Art. Sei hilfreich und erkläre, was der Code gemacht hat und was das Ergebnis bedeutet.`;
+Erkläre dem Benutzer das Ergebnis auf eine verständliche Art. Sei hilfreich und erkläre, was der Code gemacht hat und was das Ergebnis bedeutet. Berücksichtige die Sprache des Users!`;
 
         const interpretationResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
             method: 'POST',
