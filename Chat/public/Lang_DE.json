@@ -80,5 +80,6 @@
   "success_download": "Download erfolgreich auf",
   "success_remove": "Entfernung erfolgreich auf",
   "failed_all": "Auf allen Servern fehlgeschlagen.",
-  "chat": "Chat"
+  "chat": "Chat",
+  "server-settings": "Server-Einstellungen"
 }

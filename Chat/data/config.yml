@@ -10,7 +10,7 @@ trusted-domains:
   - localhost
   - 192.168.1.148
   - 192.168.1.147
-sprache: Deutsch
+sprache: Englisch
 system-prompt: >
   # IDENTITÄT
 
@@ -49,10 +49,11 @@ system-prompt: >
     ```Codeblöcke```
     Einfache Zeilenumbrüche
 smtp:
-  enabled: true
-  host: smtp.ionos.de
+  enabled: false
+  host: smtp.mymail.com
   port: 587
   secure: false
   auth:
-    user: nextcloud@ogobogo.de
-    pass: wPE30M4r2rvqp12Fm9lW
+    user: email@email.com
+    pass: password
+message-guard-enabled: true
