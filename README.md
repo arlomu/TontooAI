@@ -21,7 +21,8 @@ Build in
 **Intergrations**
 
 ```Info
-All work with evry Model```
+All work with evry Model
+```
 
 ---
 
