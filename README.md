@@ -25,17 +25,23 @@ All work with evry Model
 
 ## Demo
 
-### Chat
+### Chat (Deepsearch)
 ![Chat](pre/1.png)
 
-### Settings
+### Chat (Websearch)
 ![Settings](pre/2.png)
 
-### Adminpanel Dashboard
+### Chat (Codeinterpreter)
 ![Adminpanel Dashboard](pre/3.png)
 
-### Adminpanel Users
+### Chat
 ![Adminpanel Users](pre/4.png)
+
+### Settings
+![Adminpanel Users](pre/6.png)
+
+### Adminpanel (Config)
+![Adminpanel Users](pre/5.png)
 
 ---
 

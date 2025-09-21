@@ -7,7 +7,7 @@
       "password": "$2a$10$dZ4Q7OoHXjl4prekZ.JvXe9TAWKWW8k4FTUD1xQfWBfWpCqN7EWAO",
       "firstName": "Arlo",
       "max-tokens": "--",
-      "used-tokens": 46592,
+      "used-tokens": 51496,
       "admin": true,
       "profile": {
         "personal-ai-prompt": "",
