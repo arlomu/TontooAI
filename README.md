@@ -6,15 +6,12 @@ A **Ollama** Web UI build in NodeJS, easy to Setup
 
 ## Features
 
-- 🖥️ **Web UI** for Ollama AI models
-- 🌙 **Dark Mode** with responsive design (Only Dark Mode!)
-- 💬 **Chat history** saving and loading
-- 🔀 **Multi-model support**
-- 📸 **Easy Config**
-- 🖥️ **Admin Panel with Status and more**
-
-Build in
-
+- **Web UI** for Ollama AI models
+- **Dark Mode** with responsive design (Only Dark Mode!)
+- **Chat history** saving and loading
+- **Multi-model support**
+- **Easy Config**
+- **Admin Panel with Status and more**
 - **Code Interpreter Support Python, NodeJS**
 - **Websearch**
 - **Deepsearch**
