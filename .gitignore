@@ -1,6 +1,5 @@
 Chat/node_modules/*
 Chat/data/attempts.json
-Chat/data/chats.json
 Chat/data/stats.json
 Chat/ssl/cert.pem
 Chat/ssl/key.pem

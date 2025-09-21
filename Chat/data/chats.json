@@ -1,0 +1,70 @@
+{
+  "chats": [
+    {
+      "id": "a4e9f94d-062a-472d-a3c1-44be9cf46f57",
+      "user_id": 1,
+      "title": "Hey whats up?",
+      "messages": [
+        {
+          "id": "2adcebed-60c8-459a-8a33-828505399211",
+          "sender": "user",
+          "content": "Hey whats up?"
+        },
+        {
+          "id": "74a604f4-a434-4ae0-abd9-0ff61b7534f5",
+          "sender": "ai",
+          "content": "Hey there! Not much, just hanging out. How about you?",
+          "tokens": 244,
+          "time": "5.89"
+        },
+        {
+          "id": "e2c32e8f-6937-488e-ab2a-2f0703f26a02",
+          "sender": "user",
+          "content": "Give me Python Code"
+        },
+        {
+          "id": "76582a52-13cc-478f-b3e9-d2d420c1e20a",
+          "sender": "ai",
+          "content": "```python\ndef greet(name):\n  \"\"\"\n  This function greets the person passed in as a parameter.\n  \"\"\"\n  print(f\"Hello, {name}!\")\n\ngreet(\"World\")\n```\n\nThis code defines a Python function called `greet` that takes one argument, `name`.  It then prints a greeting message to the console using an f-string.  The code then calls the `greet` function with the argument \"World\".  The output will be:\n\nHello, World!\n\nWould you like me to do anything with this code, like explain it further or modify it?",
+          "tokens": 386,
+          "time": "6.12"
+        }
+      ],
+      "createdAt": "2025-09-21T13:16:43.019Z"
+    },
+    {
+      "id": "6305a298-2b77-4655-9027-a0268492beee",
+      "user_id": 1,
+      "title": "Do Python Say \"Hello world\"",
+      "messages": [
+        {
+          "id": "e826468e-bf4e-4eb7-832f-985ed8bce2bb",
+          "sender": "user",
+          "content": "Do Python Say \"Hello world\""
+        },
+        {
+          "id": "b5647c66-076a-4884-87d6-aaf154039bf0",
+          "sender": "ai",
+          "content": "Yes, Python says \"Hello world\".\n\n**Explanation:**\n\nThe code you provided is a simple Python program. It simply instructs the Python interpreter to print the text \"Hello world\" to the console.  Python is a high-level programming language, and this is a very basic example of how it works.\n\nSo, the answer to your question is **yes**, Python does say \"Hello world\".\n",
+          "tokens": 0,
+          "time": "17.2",
+          "codeexecution_results": {
+            "code": "print(\"Hello world\")",
+            "language": "python",
+            "packages": [
+              "requests",
+              "numpy"
+            ],
+            "version": "3",
+            "internet": "false",
+            "description": "a Small Description of what the code does",
+            "status": "success",
+            "output": "Hello world\n",
+            "error": null
+          }
+        }
+      ],
+      "createdAt": "2025-09-21T13:17:10.776Z"
+    }
+  ]
+}
