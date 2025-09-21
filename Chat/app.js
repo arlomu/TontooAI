@@ -9,6 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 const nodemailer = require('nodemailer');
 const os = require('os');
 const session = require('express-session');
+const { exec } = require('child_process');
 
 // --- Dateipfade ---
 const DATA_DIR = path.join(__dirname, 'data');
@@ -20,6 +21,7 @@ const GENERAL_PATH = path.join(DATA_DIR, 'general.json');
 const ATTEMPTS_PATH = path.join(DATA_DIR, 'attempts.json');
 const STATS_PATH = path.join(DATA_DIR, 'stats.json');
 const SSL_DIR = path.join(__dirname, 'ssl');
+const INTEGRATIONS_DIR = path.join(__dirname, 'integrations');
 
 // --- In-Memory Datenstrukturen ---
 let config = {};
@@ -29,6 +31,7 @@ let chats = { chats: [] };
 let generalConfig = {};
 let loginAttempts = { loginAttempts: {} };
 let stats = {};
+let loadedIntegrations = [];
 
 // --- Hilfsfunktionen zum Laden/Speichern von Daten ---
 const loadData = (filePath, defaultContent = {}) => {
@@ -73,19 +76,95 @@ const timeString = now.toLocaleString('de-DE', {
     timeZone: 'Europe/Berlin'
 });
 
+// NEU: Funktion zum Laden der Integrationen
+const loadIntegrations = () => {
+    loadedIntegrations = [];
+    if (!fs.existsSync(INTEGRATIONS_DIR)) {
+        fs.mkdirSync(INTEGRATIONS_DIR, { recursive: true });
+        console.log(`Integrationsverzeichnis ${INTEGRATIONS_DIR} erstellt.`);
+        return;
+    }
+
+    const integrationFolders = fs.readdirSync(INTEGRATIONS_DIR, { withFileTypes: true })
+        .filter(dirent => dirent.isDirectory())
+        .map(dirent => dirent.name);
+
+    for (const folderName of integrationFolders) {
+        const infoPath = path.join(INTEGRATIONS_DIR, folderName, 'info.yml');
+        if (fs.existsSync(infoPath)) {
+            try {
+                const info = loadData(infoPath);
+                if (info && info.name && info.systemprompt) {
+                    const apiCalls = [];
+                    for (let i = 1; i <= 5; i++) {
+                        const apiCallKey = `api-call${i}`;
+                        const apiCallGoToAiKey = `api-call${i}-go-to-ai`;
+                        const apiCallOutputKey = `api-call${i}-output`;
+
+                        if (info[apiCallKey]) {
+                            const outputStructure = info[apiCallOutputKey] ? yaml.load(info[apiCallOutputKey]) : null;
+                            const outputPaths = {};
+                            if (outputStructure) {
+                                const findPaths = (obj, currentPath = '') => {
+                                    if (typeof obj === 'object' && obj !== null) {
+                                        for (const key in obj) {
+                                            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                                                const value = obj[key];
+                                                if (typeof value === 'string' && !isNaN(parseInt(value))) {
+                                                    outputPaths[parseInt(value)] = currentPath ? `${currentPath}.${key}` : key;
+                                                } else if (typeof value === 'object') {
+                                                    findPaths(value, currentPath ? `${currentPath}.${key}` : key);
+                                                }
+                                            }
+                                        }
+                                    }
+                                };
+                                findPaths(outputStructure);
+                            }
+
+                            apiCalls.push({
+                                id: i,
+                                command: info[apiCallKey],
+                                goToAi: info[apiCallGoToAiKey] || false,
+                                outputPaths: outputPaths,
+                                outputTemplate: info[apiCallOutputKey]
+                            });
+                        }
+                    }
+
+                    loadedIntegrations.push({
+                        id: folderName,
+                        name: info.name,
+                        description: info.description,
+                        icon: info.icon || 'default_icon.png',
+                        systemprompt: info.systemprompt,
+                        apiCalls: apiCalls
+                    });
+                    console.log(`Integration "${info.name}" geladen.`);
+                } else {
+                    console.warn(`info.yml in ${folderName} ist unvollständig (Name oder Systemprompt fehlt).`);
+                }
+            } catch (error) {
+                console.error(`Fehler beim Laden der info.yml in ${folderName}:`, error.message);
+            }
+        }
+    }
+    console.log(`Insgesamt ${loadedIntegrations.length} Integrationen geladen.`);
+};
+
 // Laden aller Daten beim Start
 const initializeData = () => {
     generalConfig = loadData(GENERAL_PATH, { "name": "Tontoo AI", "html-titel": "Tontoo AI | %name", "developer": "arlomu", "github": "https://github.com/arlomu" });
     config = loadData(CONFIG_PATH, {
-        "main-port": 80, "ollima": { "port": 11434, "host1": "localhost", "host2": "none" },
+        "main-port": 80, "ollama": { "port": 11434, "host1": "localhost", "host2": "none" },
         "ssl-port": 443, "2er-port": 8080, "host": "localhost",
         "trusted-domains": ["localhost", "127.0.0.1"],
         "sprache": "Deutsch",
         "system-prompt": "# Placeholders: %user-prompt% ...",
         "smtp": {}
-        // "message-guard-enabled" removed from defaults
     });
     users = loadData(USERS_PATH, { users: [] });
+    loadIntegrations();
     models = loadData(MODELS_PATH, {});
     chats = loadData(CHATS_PATH, { chats: [] });
     loginAttempts = loadData(ATTEMPTS_PATH, { loginAttempts: {} });
@@ -375,11 +454,11 @@ app.post('/api/admin/models/manage', authenticateUser, authorizeAdmin, async (re
     }
     
     const results = [];
-    const hosts = [config.ollima.host1, config.ollima.host2].filter(host => host !== 'none');
+    const hosts = [config.ollama.host1, config.ollama.host2].filter(host => host !== 'none');
     for (const host of hosts) {
         try {
             const ollamaHost = host === 'localhost' ? '127.0.0.1' : host;
-            const ollamaPort = config.ollima.port;
+            const ollamaPort = config.ollama.port;
             
             let endpoint, method, body;
             
@@ -808,8 +887,6 @@ Nutzer-Eingabe: ${message}`;
         const websearchResult = await websearchResponse.json();
         const { zusammenfassung, quellen } = websearchResult;
 
-        console.log('Websearch result quellen:', quellen); // Debugging-Log für Quellen
-
         // Websearch-Ergebnisse (Quellen) sofort senden
         res.write(JSON.stringify({
             type: 'websearch',
@@ -828,7 +905,7 @@ Nutzer-Eingabe: ${message}`;
 
         const finalMessages = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `${message}\n\nWebsearch Zusammenfassung: ${zusammenfassung}` }
+            { role: 'user', content: `Der user hat die Websearch benutzt mit anfrage: ${message}\n\nWebsearch Zusammenfassung: ${zusammenfassung}` }
         ];
 
         const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
@@ -955,6 +1032,391 @@ Nutzer-Eingabe: ${message}`;
             }
         }
     } finally {
+        if (abortController) {
+            userGenerationControllers.delete(req.userId);
+        }
+    }
+});
+
+// NEU: Endpunkt zum Abrufen der Integrationen
+app.get('/api/integrations', authenticateUser, (req, res) => {
+    // Sende nur die notwendigen Informationen an das Frontend
+    const integrationsForFrontend = loadedIntegrations.map(integration => ({
+        id: integration.id,
+        name: integration.name,
+        description: integration.description,
+        icon: integration.icon // Frontend wird /api/integrations/icon/:id aufrufen
+    }));
+    res.json(integrationsForFrontend);
+});
+
+// NEU: Endpunkt zum Ausliefern von Integrations-Icons
+app.get('/api/integrations/icon/:integrationId', (req, res) => {
+    const integrationId = req.params.integrationId;
+    const integration = loadedIntegrations.find(i => i.id === integrationId);
+
+    if (integration && integration.icon) {
+        const iconPath = path.join(INTEGRATIONS_DIR, integrationId, integration.icon);
+        if (fs.existsSync(iconPath)) {
+            res.sendFile(iconPath);
+        } else {
+            res.status(404).send('Icon not found.');
+        }
+    } else {
+        res.status(404).send('Integration or icon not found.');
+    }
+});
+
+// NEU: Endpunkt zur Ausführung einer Integration
+app.post('/api/integrate', authenticateUser, async (req, res) => {
+    let aiFullResponse = '';
+    let tokensUsed = 0;
+    let durationMs = 0;
+    let abortController = null;
+    let currentChat = null;
+    let keepAliveInterval = null;
+
+    try {
+        res.setTimeout(600000);
+        req.socket.setTimeout(600000);
+        res.connection.setTimeout(600000);
+
+        const { message, model, integrationId } = req.body;
+        let chatId = req.headers['x-chat-id'] || null;
+        const user = users.users.find(u => u.id === req.userId);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const maxTokens = user['max-tokens'] === '--' ? Infinity : parseInt(user['max-tokens']);
+        if (user['used-tokens'] >= maxTokens) {
+            return res.status(403).json({ message: 'Daily token limit reached.' });
+        }
+
+        const integration = loadedIntegrations.find(i => i.id === integrationId);
+        if (!integration) {
+            return res.status(404).json({ message: 'Integration not found.' });
+        }
+
+        currentChat = chats.chats.find(c => c.id === chatId && c.user_id === req.userId);
+        let isNewChat = false;
+
+        if (!currentChat) {
+            chatId = uuidv4();
+            currentChat = {
+                id: chatId,
+                user_id: user.id,
+                title: message.substring(0, 15) + (message.length > 15 ? '...' : ''),
+                messages: [],
+                createdAt: new Date().toISOString()
+            };
+            chats.chats.push(currentChat);
+            isNewChat = true;
+        }
+
+        currentChat.messages.push({
+            id: uuidv4(),
+            sender: 'user',
+            content: message
+        });
+        saveData(CHATS_PATH, chats);
+
+        abortController = new AbortController();
+        userGenerationControllers.set(req.userId, abortController);
+
+        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaPort = config.ollama.port;
+        const ollamaModel = model && models[model] ? model : Object.keys(models) || 'llama3';
+
+        res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        });
+
+        res.write(JSON.stringify({
+            type: 'progress',
+            message: `AI denkt nach`,
+            done: false
+        }) + '\n');
+        res.flush?.();
+
+        keepAliveInterval = setInterval(() => {
+            const keepAlivePayload = { type: 'progress', message: `Integration "${integration.name}" läuft`, done: false };
+            res.write(JSON.stringify(keepAlivePayload) + '\n');
+            res.flush?.();
+        }, 30000);
+
+        const startTime = process.hrtime.bigint();
+
+        // --- Step 1: Ollama call to extract parameters for API calls ---
+        const ollamaParamExtractionPrompt = `${integration.systemprompt}\n\nBenutzeranfrage: ${message}`;
+        console.log('Ollama Param Extraction Prompt:', ollamaParamExtractionPrompt);
+
+        const paramExtractionResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: [{ role: 'system', content: ollamaParamExtractionPrompt }],
+                stream: false
+            }),
+            signal: abortController.signal
+        });
+
+        if (!paramExtractionResponse.ok) {
+            const errorText = await paramExtractionResponse.text();
+            throw new Error(`Ollama parameter extraction API error: ${paramExtractionResponse.status} - ${errorText}`);
+        }
+
+        const paramExtractionData = await paramExtractionResponse.json();
+        let aiParams = {};
+        try {
+            const content = paramExtractionData.message?.content;
+            if (!content) {
+                throw new Error('Ollama parameter extraction response is empty.');
+            }
+            const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/);
+            if (jsonMatch) {
+                aiParams = JSON.parse(jsonMatch[1]); // Parse the content inside the json block
+            } else {
+                aiParams = JSON.parse(content); // Try parsing directly if no ```json block
+            }
+        } catch (e) {
+            console.error('Error parsing Ollama parameter extraction response:', e.message, 'Content:', paramExtractionData.message?.content);
+            throw new Error(`Failed to parse parameters from AI: ${e.message}`);
+        }
+
+        // --- Step 2: Execute API calls ---
+        const apiResults = {}; // Stores full JSON response of each API call
+        const extractedApiValues = {}; // Stores values extracted by numeric IDs (e.g., api-1_4)
+        const finalAiContext = []; // Stores outputs of api-calls marked with go-to-ai: true
+
+        // Helper to replace placeholders
+        const replacePlaceholders = (template, aiParams, extractedApiValues) => {
+            let result = template;
+            for (const key in aiParams) {
+                result = result.replace(new RegExp(`%ai_${key}%`, 'g'), encodeURIComponent(aiParams[key]));
+            }
+            for (const key in extractedApiValues) {
+                result = result.replace(new RegExp(`%${key}%`, 'g'), encodeURIComponent(extractedApiValues[key]));
+            }
+            return result;
+        };
+
+        // Helper to get value from a JSON object using a dot-separated path
+        const getObjectValueByPath = (obj, path) => {
+            return path.split('.').reduce((acc, part) => acc && acc[part] !== undefined ? acc[part] : undefined, obj);
+        };
+
+        for (const apiCall of integration.apiCalls) {
+            res.write(JSON.stringify({
+                type: 'progress',
+                message: `KI sammelt Daten`
+            }) + '\n');
+            res.flush?.();
+
+            const commandToExecute = replacePlaceholders(apiCall.command, aiParams, extractedApiValues);
+
+            try {
+                const { stdout, stderr } = await new Promise((resolve, reject) => {
+                    exec(commandToExecute, { signal: abortController.signal, timeout: 60000 }, (error, stdout, stderr) => {
+                        if (error) {
+                            console.error(`API Call ${apiCall.id} Error:`, error);
+                            // If it's an abort error, propagate it
+                            if (error.signal === 'SIGTERM') { // AbortController sends SIGTERM
+                                return reject(new Error('AbortError'));
+                            }
+                            // For other errors, still try to parse stdout/stderr for context
+                            return resolve({ stdout, stderr, error });
+                        }
+                        resolve({ stdout, stderr });
+                    });
+                });
+
+                if (stderr) {
+                }
+
+                let apiResponseJson;
+                try {
+                    apiResponseJson = JSON.parse(stdout);
+                    apiResults[`api-call${apiCall.id}`] = apiResponseJson;
+                } catch (parseError) {
+                    console.error(`API Call ${apiCall.id} failed to parse JSON:`, parseError.message, 'Raw output:', stdout);
+                    apiResponseJson = { error: `Failed to parse API response: ${parseError.message}`, raw_output: stdout };
+                    apiResults[`api-call${apiCall.id}`] = apiResponseJson; // Store error response
+                }
+
+                // Extract values based on outputPaths
+                for (const numId in apiCall.outputPaths) {
+                    const jsonPath = apiCall.outputPaths[numId];
+                    const value = getObjectValueByPath(apiResponseJson, jsonPath);
+                    if (value !== undefined) {
+                        extractedApiValues[`api-${apiCall.id}_${numId}`] = value;
+                    } else {
+                        console.warn(`Could not extract value for %api-${apiCall.id}_${numId}% from path "${jsonPath}". Response:`, apiResponseJson);
+                    }
+                }
+
+                if (apiCall.goToAi) {
+                    finalAiContext.push(`Output of API Call ${apiCall.id} (${integration.name}):\n\`\`\`json\n${JSON.stringify(apiResponseJson, null, 2)}\n\`\ पौधा\` `);
+                }
+
+            } catch (error) {
+                if (error.message === 'AbortError') {
+                    throw error; // Re-throw to be caught by the outer AbortError handler
+                }
+                console.error(`Error executing API Call ${apiCall.id}:`, error);
+                // Continue to next API call or handle as a fatal error
+                finalAiContext.push(`Error executing API Call ${apiCall.id} for ${integration.name}: ${error.message}`);
+            }
+        }
+
+        // Keep-Alive stoppen
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
+
+        // --- Step 3: Final Ollama call to generate user-facing response ---
+        const finalSystemPrompt = config['system-prompt']
+            .replace('%user-prompt%', user.profile['personal-ai-prompt'] || '')
+            .replace('%user-name%', user.firstName || 'User')
+            .replace('%user-location%', user.profile.location || 'unbekannt')
+            .replace('%model%', ollamaModel)
+            .replace('%sprache%', config.sprache)
+            .replace('%time%', timeString);
+
+        const finalUserMessage = `Du solst nett antworten der User hat eine Intigration gestartet & will jetzt seine ergebnisse: ${message}\n\n${finalAiContext.join('\n\n')}`;
+
+        const finalOllamaMessages = [
+            { role: 'system', content: finalSystemPrompt },
+            { role: 'user', content: finalUserMessage }
+        ];
+
+        const finalOllamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: ollamaModel,
+                messages: finalOllamaMessages,
+                stream: true
+            }),
+            signal: abortController.signal
+        });
+
+        if (!finalOllamaResponse.ok) {
+            const errorText = await finalOllamaResponse.text();
+            throw new Error(`Final Ollama API error: ${finalOllamaResponse.status} - ${errorText}`);
+        }
+
+        const reader = finalOllamaResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim() === '') continue;
+                    try {
+                        const data = JSON.parse(line);
+                        if (data.message && data.message.content) {
+                            aiFullResponse += data.message.content;
+                            res.write(JSON.stringify({
+                                type: 'token',
+                                token: data.message.content,
+                                done: data.done || false
+                            }) + '\n');
+                            res.flush?.();
+                        }
+
+                        if (data.done && data.prompt_eval_count && data.eval_count) {
+                            tokensUsed = data.prompt_eval_count + data.eval_count;
+                        }
+                    } catch (parseError) {
+                        console.error('Parse error in final Ollama stream:', parseError.message, 'Line:', line);
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
+        }
+
+        const endTime = process.hrtime.bigint();
+        durationMs = Number(endTime - startTime) / 1_000_000;
+
+        currentChat.messages.push({
+            id: uuidv4(),
+            sender: 'ai',
+            content: aiFullResponse,
+            tokens: tokensUsed,
+            time: (durationMs / 1000).toFixed(2),
+            integrationResults: {
+                integrationId: integration.id,
+                integrationName: integration.name,
+                apiOutputs: apiResults // Store full API results for debugging/display if needed
+            }
+        });
+
+        user['used-tokens'] = (user['used-tokens'] || 0) + tokensUsed;
+        stats.overallStats.totalTokensUsed = (stats.overallStats.totalTokensUsed || 0) + tokensUsed;
+        const today = new Date().toISOString().slice(0, 10);
+        if (!stats.dailyStats[today]) {
+            stats.dailyStats[today] = { totalTokensUsed: 0 };
+        }
+        stats.dailyStats[today].totalTokensUsed += tokensUsed;
+
+        saveData(CHATS_PATH, chats);
+        saveData(USERS_PATH, users);
+        saveData(STATS_PATH, stats);
+
+        res.write(JSON.stringify({
+            type: 'end',
+            tokens: tokensUsed,
+            time: (durationMs / 1000).toFixed(2),
+            chatId: chatId,
+            isNewChat: isNewChat
+        }) + '\n');
+        res.end();
+
+    } catch (error) {
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
+        if (error.message === 'AbortError') {
+            if (!res.headersSent) {
+                return res.status(499).json({
+                    type: 'aborted',
+                    message: 'Integration abgebrochen'
+                });
+            } else {
+                res.write(JSON.stringify({ type: 'aborted', message: 'Integration abgebrochen' }) + '\n');
+                res.end();
+            }
+        } else {
+            console.error('Integration Error:', error.name, error.message, error.stack);
+            if (!res.headersSent) {
+                res.status(500).json({
+                    type: 'error',
+                    message: error.message || 'Interner Serverfehler bei Integration',
+                    code: error.code
+                });
+            } else {
+                res.write(JSON.stringify({
+                    type: 'error',
+                    message: error.message || 'Interner Serverfehler bei Integration',
+                    code: error.code
+                }) + '\n');
+                res.end();
+            }
+        }
+    } finally {
+        if (keepAliveInterval) clearInterval(keepAliveInterval);
         if (abortController) {
             userGenerationControllers.delete(req.userId);
         }
@@ -1139,7 +1601,7 @@ Nutzer-Eingabe: ${message}`;
 
         const finalMessages = [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `${message}\n\nDeepsearch Zusammenfassung: ${zusammenfassung}` }
+            { role: 'user', content: `Der user hat Deepsearch angefragt mit text: ${message}\n\nDeepsearch Zusammenfassung: ${zusammenfassung}` }
         ];
 
         const ollamaResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
@@ -1459,7 +1921,7 @@ Benutzeranfrage: ${message}`;
         }) + '\n');
         if (typeof res.flush === 'function') res.flush();
 
-        const interpretationPrompt = `Hier ist das Ergebnis der Code-Ausführung:
+        const interpretationPrompt = `Der user hat den Code interpreter genutzt Hier ist das Ergebnis der Code-Ausführung:
 
 Code: ${codeExecutionData.code}
 Sprache: ${codeExecutionData.language}

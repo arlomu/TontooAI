@@ -34,14 +34,21 @@
                             <i class="fas fa-plus"></i>
                         </button>
                         <div class="feature-menu" id="featureMenu">
-                            <button class="feature-menu-item" id="codeInterpreterBtn" onclick="toggleFeature('Codeinterpreter')">
+                            <button class="feature-menu-item" id="codeInterpreterBtn" data-feature-type="Codeinterpreter">
                                 <i class="fas fa-code"></i>Codeinterpreter
                             </button>
-                            <button class="feature-menu-item" id="websearchBtn" onclick="toggleFeature('Websearch')">
+                            <button class="feature-menu-item" id="websearchBtn" data-feature-type="Websearch">
                                 <i class="fas fa-search"></i>Websearch
                             </button>
-                            <button class="feature-menu-item" id="deepSearchBtn" onclick="toggleFeature('DeepSearch')">
+                            <button class="feature-menu-item" id="deepSearchBtn" data-feature-type="DeepSearch">
                                 <i class="fas fa-search-plus"></i>DeepSearch
+                            </button>
+                            <!-- NEU: Integrations-Button -->
+                            <button class="feature-menu-item" id="integrationsMenuBtn" data-feature-type="Integrations">
+                                <i class="fas fa-plug"></i>Integrationen
+                                <div class="integrations-submenu" id="integrationsSubmenu">
+                                    <!-- Integrationen werden hier dynamisch geladen -->
+                                </div>
                             </button>
                         </div>
                     </div>
@@ -79,40 +86,49 @@
             });
         };
 
-        let activeFeature = null;
+        let activeFeature = null; // Can be 'Codeinterpreter', 'Websearch', 'DeepSearch', 'Integration'
+        let activeIntegrationId = null; // Only set if activeFeature is 'Integration'
 
-        function toggleFeature(featureName) {
-            console.log('Toggling feature:', featureName);
+        function toggleFeature(featureName, integrationId = null) {
+            console.log('Toggling feature:', featureName, 'Integration ID:', integrationId);
 
-            if (activeFeature && activeFeature !== featureName) {
-                showPopup(`Nur eine Funktion kann aktiv sein. Deaktiviere ${activeFeature} zuerst.`, 'info');
-                return;
-            }
+            const allFeatureButtons = document.querySelectorAll('.feature-menu-item');
+            const integrationsSubmenuItems = document.querySelectorAll('.integration-submenu-item');
 
-            const buttonIdMap = {
-                'Codeinterpreter': 'codeInterpreterBtn',
-                'Websearch': 'websearchBtn',
-                'DeepSearch': 'deepSearchBtn'
-            };
-            const buttonId = buttonIdMap[featureName];
-            const button = document.getElementById(buttonId);
-            if (!button) {
-                console.error(`Button with ID ${buttonId} not found`);
-                showPopup(`Fehler: Schaltfläche ${featureName} nicht gefunden.`, 'error');
-                return;
-            }
-
-            if (activeFeature === featureName) {
+            // Deaktiviere alle Features und Integrationen
+            allFeatureButtons.forEach(btn => btn.classList.remove('active'));
+            integrationsSubmenuItems.forEach(item => item.classList.remove('active'));
+            
+            // Wenn das gleiche Feature/Integration erneut ausgewählt wird, deaktiviere es
+            if (activeFeature === featureName && activeIntegrationId === integrationId) {
                 activeFeature = null;
-                button.classList.remove('active');
+                activeIntegrationId = null;
                 showPopup(`${featureName} deaktiviert.`, 'info');
+                return;
+            }
+
+            // Aktiviere das neue Feature/die neue Integration
+            activeFeature = featureName;
+            activeIntegrationId = integrationId;
+
+            if (featureName === 'Integrations' && integrationId) {
+                // Aktiviere den Haupt-Integrations-Button und den spezifischen Submenü-Eintrag
+                document.getElementById('integrationsMenuBtn')?.classList.add('active');
+                document.querySelector(`.integration-submenu-item[data-integration-id="${integrationId}"]`)?.classList.add('active');
+                showPopup(`Integration "${integrationId}" aktiviert.`, 'success');
             } else {
-                activeFeature = featureName;
-                document.querySelectorAll('.feature-menu-item').forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
+                // Aktiviere den spezifischen Feature-Button
+                const buttonIdMap = {
+                    'Codeinterpreter': 'codeInterpreterBtn',
+                    'Websearch': 'websearchBtn',
+                    'DeepSearch': 'deepSearchBtn'
+                };
+                document.getElementById(buttonIdMap[featureName])?.classList.add('active');
                 showPopup(`${featureName} aktiviert.`, 'success');
             }
-            document.getElementById('featureMenu').classList.remove('active');
+            
+            document.getElementById('featureMenu').classList.remove('active'); // Schließe das Hauptmenü
+            document.getElementById('integrationsSubmenu')?.classList.remove('active'); // Schließe das Integrations-Untermenü
         }
 
         async function authenticatedFetch(url, options = {}) {
@@ -180,21 +196,52 @@
 
             const featureMenuBtn = document.getElementById('featureMenuBtn');
             const featureMenu = document.getElementById('featureMenu');
+            const integrationsMenuBtn = document.getElementById('integrationsMenuBtn'); // NEU
+            const integrationsSubmenu = document.getElementById('integrationsSubmenu'); // NEU
             
             featureMenuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 featureMenu.classList.toggle('active');
+                integrationsSubmenu.classList.remove('active'); // Schließe Untermenü, wenn Hauptmenü geöffnet wird
             });
             
+            // NEU: Event Listener für Integrations-Button
+            integrationsMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                integrationsSubmenu.classList.toggle('active');
+            });
+
             document.addEventListener('click', (e) => {
                 if (!featureMenu.contains(e.target) && e.target !== featureMenuBtn) {
                     featureMenu.classList.remove('active');
                 }
+                // NEU: Schließe Integrations-Untermenü, wenn außerhalb geklickt wird
+                if (!integrationsSubmenu.contains(e.target) && e.target !== integrationsMenuBtn) {
+                    integrationsSubmenu.classList.remove('active');
+                }
             });
             
             featureMenu.addEventListener('click', (e) => {
-                e.stopPropagation();
+                // Wenn ein Feature-Button (außer Integrations-Button) geklickt wird
+                if (e.target.closest('.feature-menu-item') && !e.target.closest('#integrationsMenuBtn')) {
+                    const featureType = e.target.closest('.feature-menu-item').dataset.featureType;
+                    if (featureType) {
+                        toggleFeature(featureType);
+                    }
+                }
+                e.stopPropagation(); // Verhindert, dass das Hauptmenü sofort wieder schließt
             });
+
+            // NEU: Event Listener für die Integrationen im Untermenü
+            integrationsSubmenu.addEventListener('click', (e) => {
+                const integrationItem = e.target.closest('.integration-submenu-item');
+                if (integrationItem) {
+                    const integrationId = integrationItem.dataset.integrationId;
+                    toggleFeature('Integrations', integrationId);
+                }
+                e.stopPropagation(); // Verhindert, dass das Untermenü sofort wieder schließt
+            });
+
 
             const chatSidebar = document.getElementById('chatSidebar');
             const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
@@ -401,6 +448,32 @@
                 }
             }
 
+            // NEU: Integrationen laden und im Menü anzeigen
+            async function loadIntegrationsUI() {
+                try {
+                    const response = await authenticatedFetch('/api/integrations');
+                    if (!response.ok) throw new Error('Integrationen konnten nicht geladen werden.');
+                    const integrations = await response.json();
+                    integrationsSubmenu.innerHTML = ''; // Clear previous items
+
+                    if (integrations.length === 0) {
+                        integrationsSubmenu.innerHTML = '<div class="integration-submenu-item disabled">Keine Integrationen gefunden</div>';
+                    } else {
+                        integrations.forEach(integration => {
+                            const integrationItem = document.createElement('button');
+                            integrationItem.classList.add('integration-submenu-item');
+                            integrationItem.dataset.integrationId = integration.id;
+                            integrationItem.innerHTML = `<img src="/api/integrations/icon/${integration.id}" alt="${integration.name} Icon" class="integration-icon"> ${integration.name}`;
+                            integrationsSubmenu.appendChild(integrationItem);
+                        });
+                    }
+                } catch (error) {
+                    console.error("Fehler beim Laden der Integrationen:", error);
+                    showPopup("Fehler beim Laden der Integrationen.", "error");
+                }
+            }
+
+
             async function stopGeneration() {
                 if (!isGeneratingResponse) return;
                 
@@ -429,7 +502,7 @@
                 return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
             }
 
-            function formatMessageContent(content, websearchResults = null, deepsearchResults = null, codeExecutionResults = null) {
+            function formatMessageContent(content, websearchResults = null, deepsearchResults = null, codeExecutionResults = null, integrationResults = null) {
                 const codeBlockPlaceholders = [];
                 content = content.replace(/```([\s\S]*?)```/g, (match, codeContent) => {
                     const placeholder = `___CODE_BLOCK_${codeBlockPlaceholders.length}___`;
@@ -561,6 +634,32 @@
                         </div>
                     `;
                 }
+
+                // NEU: Integration Results
+                if (integrationResults) {
+                    formattedContent += `
+                        <div class="integration-results">
+                            <div class="integration-header">
+                                <i class="fas fa-plug"></i> Integration: <strong>${integrationResults.integrationName || 'Unbekannt'}</strong>
+                            </div>
+                            <div class="integration-details">
+                                <p>Die Integration hat externe APIs aufgerufen, um Informationen zu sammeln.</p>
+                                <!-- Optional: Anzeige der API-Outputs für Debugging -->
+                                ${integrationResults.apiOutputs ? `
+                                    <div class="integration-api-outputs">
+                                        <strong>API-Antworten:</strong>
+                                        ${Object.keys(integrationResults.apiOutputs).map(key => `
+                                            <div class="integration-api-output-item">
+                                                <span>${key}:</span>
+                                                <pre><code>${escapeHtml(JSON.stringify(integrationResults.apiOutputs[key], null, 2))}</code></pre>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
                 
                 return formattedContent;
             }
@@ -579,7 +678,8 @@
                     message.content, 
                     message.websearchResults, 
                     message.deepsearchResults,
-                    message.codeexecution_results || message.codeExecutionResults
+                    message.codeexecution_results || message.codeExecutionResults,
+                    message.integrationResults // NEU
                 );
 
                 messageElement.innerHTML = `
@@ -593,7 +693,7 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
 
-            function updateLastAiMessage(chunk, isDone = false, stats = {}, websearchResults = null, deepsearchResults = null, codeExecutionResults = null) {
+            function updateLastAiMessage(chunk, isDone = false, stats = {}, websearchResults = null, deepsearchResults = null, codeExecutionResults = null, integrationResults = null) {
                 let lastMessageElement = chatMessages.querySelector('.chat-message.ai:last-child');
                 
                 if (!lastMessageElement) {
@@ -606,7 +706,7 @@
                 const newContent = currentContent + chunk;
                 bubble.dataset.rawContent = newContent;
                 
-                bubble.innerHTML = formatMessageContent(newContent, websearchResults, deepsearchResults, codeExecutionResults);
+                bubble.innerHTML = formatMessageContent(newContent, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
 
                 if (isDone) {
                     const infoContainer = document.createElement('div');
@@ -632,7 +732,7 @@
             function renderChatMessages(messages) {
                 chatMessages.innerHTML = '';
                 messages.forEach(msg => {
-                    console.log('Rendering message:', msg.id, 'with codeexecution_results:', msg.codeexecution_results);
+                    console.log('Rendering message:', msg.id, 'with codeexecution_results:', msg.codeexecution_results, 'integrationResults:', msg.integrationResults);
                     addMessageToChat(msg);
                 });
                 console.log('Finished rendering all messages');
@@ -657,10 +757,25 @@
                     content 
                 });
 
-                let loadingMessageText = activeFeature === 'Codeinterpreter' ? 'Code wird ausgeführt...' :
-                                        activeFeature === 'Websearch' ? 'Websearch läuft...' :
-                                        activeFeature === 'DeepSearch' ? 'Deepsearch läuft...' :
-                                        'KI antwortet...';
+                let loadingMessageText = 'KI antwortet...';
+                let apiUrl = '/api/chat/send';
+                let requestBody = { message: content, model: modelSelector.value };
+
+                if (activeFeature === 'Codeinterpreter') {
+                    loadingMessageText = 'Code wird ausgeführt...';
+                    apiUrl = '/api/codeinterpreter';
+                } else if (activeFeature === 'Websearch') {
+                    loadingMessageText = 'Websearch läuft...';
+                    apiUrl = '/api/websearch';
+                } else if (activeFeature === 'DeepSearch') {
+                    loadingMessageText = 'Deepsearch läuft...';
+                    apiUrl = '/api/deepsearch';
+                } else if (activeFeature === 'Integrations' && activeIntegrationId) { // NEU
+                    loadingMessageText = `Integration "${activeIntegrationId}" wird ausgeführt...`;
+                    apiUrl = '/api/integrate';
+                    requestBody.integrationId = activeIntegrationId;
+                }
+                
                 showLoadingIndicator(loadingMessageText);
 
                 try {
@@ -671,51 +786,15 @@
                         setTimeout(() => reject(new Error('Request-Timeout nach 10 Minuten')), 600000)
                     );
 
-                    if (activeFeature === 'Codeinterpreter') {
-                        console.log('Sending Code Interpreter request');
-                        response = await Promise.race([
-                            authenticatedFetch('/api/codeinterpreter', {
-                                method: 'POST',
-                                headers: { 'X-Chat-ID': currentChatId || '' },
-                                body: JSON.stringify({ message: content, model: modelSelector.value }),
-                                signal: abortController.signal
-                            }),
-                            timeoutPromise
-                        ]);
-                    } else if (activeFeature === 'Websearch') {
-                        console.log('Sending Websearch request');
-                        response = await Promise.race([
-                            authenticatedFetch('/api/websearch', {
-                                method: 'POST',
-                                headers: { 'X-Chat-ID': currentChatId || '' },
-                                body: JSON.stringify({ message: content, model: modelSelector.value }),
-                                signal: abortController.signal
-                            }),
-                            timeoutPromise
-                        ]);
-                    } else if (activeFeature === 'DeepSearch') {
-                        console.log('Sending DeepSearch request');
-                        response = await Promise.race([
-                            authenticatedFetch('/api/deepsearch', {
-                                method: 'POST',
-                                headers: { 'X-Chat-ID': currentChatId || '' },
-                                body: JSON.stringify({ message: content, model: modelSelector.value }),
-                                signal: abortController.signal
-                            }),
-                            timeoutPromise
-                        ]);
-                    } else {
-                        console.log('Sending standard chat request');
-                        response = await Promise.race([
-                            authenticatedFetch('/api/chat/send', {
-                                method: 'POST',
-                                headers: { 'X-Chat-ID': currentChatId || '' },
-                                body: JSON.stringify({ message: content, model: modelSelector.value }),
-                                signal: abortController.signal
-                            }),
-                            timeoutPromise
-                        ]);
-                    }
+                    response = await Promise.race([
+                        authenticatedFetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'X-Chat-ID': currentChatId || '' },
+                            body: JSON.stringify(requestBody),
+                            signal: abortController.signal
+                        }),
+                        timeoutPromise
+                    ]);
 
                     if (!response.ok) {
                         let errText = 'Fehler vom Server';
@@ -770,6 +849,7 @@
                     let websearchResults = null;
                     let deepsearchResults = null;
                     let codeExecutionResults = null;
+                    let integrationResults = null; // NEU
                     let buffer = '';
                     
                     try {
@@ -801,35 +881,44 @@
                                     showLoadingIndicator(data.message);
                                 } else if (data.type === 'token') {
                                     aiResponseContent += data.token;
-                                    updateLastAiMessage(data.token, false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    updateLastAiMessage(data.token, false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     hideLoadingIndicator();
                                 } else if (data.type === 'websearch') {
                                     websearchResults = data.websearchResults;
-                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     hideLoadingIndicator();
                                 } else if (data.type === 'deepsearch') {
                                     deepsearchResults = data.deepsearchResults;
-                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     hideLoadingIndicator();
                                 } else if (data.type === 'codeexecution') {
                                     codeExecutionResults = data.codeExecutionResults;
-                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     hideLoadingIndicator();
-                                } else if (data.type === 'end') {
-                                    updateLastAiMessage('', true, { tokens: data.tokens, time: data.time }, websearchResults, deepsearchResults, codeExecutionResults);
+                                } else if (data.type === 'integration') { // NEU
+                                    integrationResults = data.integrationResults;
+                                    updateLastAiMessage('', false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
+                                    hideLoadingIndicator();
+                                }
+                                else if (data.type === 'end') {
+                                    updateLastAiMessage('', true, { tokens: data.tokens, time: data.time }, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                                     if (data.isNewChat) currentChatId = data.chatId;
                                     loadChatList();
                                     loadUserInfo();
                                     streamEnded = true;
+                                    // Deaktiviere das aktive Feature/Integration nach Abschluss
                                     if (activeFeature) {
                                         const buttonIdMap = {
                                             'Codeinterpreter': 'codeInterpreterBtn',
                                             'Websearch': 'websearchBtn',
-                                            'DeepSearch': 'deepSearchBtn'
+                                            'DeepSearch': 'deepSearchBtn',
+                                            'Integrations': 'integrationsMenuBtn'
                                         };
-                                        document.getElementById(buttonIdMap[activeFeature]).classList.remove('active');
+                                        document.getElementById(buttonIdMap[activeFeature])?.classList.remove('active');
+                                        document.querySelector(`.integration-submenu-item[data-integration-id="${activeIntegrationId}"]`)?.classList.remove('active');
                                         showPopup(`${activeFeature} deaktiviert.`, 'info');
                                         activeFeature = null;
+                                        activeIntegrationId = null;
                                     }
                                     hideLoadingIndicator();
                                     break;
@@ -843,7 +932,7 @@
                     } catch (streamError) {
                         if (streamError.name !== 'AbortError' && streamError.message !== 'Request-Timeout nach 10 Minuten') {
                             console.error('Stream-Fehler:', streamError);
-                            updateLastAiMessage(`\n\n**Fehler:** ${streamError.message}`, false, {}, websearchResults, deepsearchResults, codeExecutionResults);
+                            updateLastAiMessage(`\n\n**Fehler:** ${streamError.message}`, false, {}, websearchResults, deepsearchResults, codeExecutionResults, integrationResults);
                         }
                     } finally {
                         reader.releaseLock();
@@ -852,7 +941,7 @@
                 } catch (error) {
                     if (error.name !== 'AbortError' && error.message !== 'Request-Timeout nach 10 Minuten') {
                         console.error('Fehler bei der KI-Antwort:', error);
-                        updateLastAiMessage(`\n\n**Fehler:** ${error.message}`, false, {}, null, null, null);
+                        updateLastAiMessage(`\n\n**Fehler:** ${error.message}`, false, {}, null, null, null, null);
                     }
                 } finally {
                     isGeneratingResponse = false;
@@ -886,6 +975,7 @@
             loadUserInfo();
             loadChatList();
             loadModels();
+            loadIntegrationsUI(); // NEU: Integrationen beim Start laden
         });
     </script>
 </body>

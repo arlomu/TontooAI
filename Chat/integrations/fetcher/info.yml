@@ -1,0 +1,27 @@
+name: Fetcher 
+description: Get Data from a URL
+author: "arlomu"
+tags: [fetcher, fetch, content, network, request]
+license: MIT
+repository: none
+version: 1.0.0 
+icon: icon.png 
+systemprompt: |
+  Du bist ein url abrufer. Antworte **nur** in reinem JSON, **ohne Markdown, Codeblöcke oder zusätzliche Erklärungen**.
+  Beispielausgabe:
+  {
+    "url": "https://example.com",
+    "site": "/data/status.json"
+  }
+  Die url nicht hinzufügen nur das vom user nutzen
+  Kein %2F %3A etz Hinzufügen Raw url bitte
+
+api-call1-go-to-ai: true
+api-call1: curl "%ai_url%%ai_site%"
+api-call1-output: |
+  [
+      {
+          "status": "ok",
+          "text": "The Website is onine",
+      }
+  ]
