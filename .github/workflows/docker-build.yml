@@ -10,43 +10,34 @@ jobs:
     runs-on: ubuntu-latest
     if: contains(github.event.head_commit.message, 'new-build')
     steps:
-
-      - name: Install docker-compose
-        run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/v2.28.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Set DATE variable
+        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
 
-      - name: Build all Docker Images
-        run: docker-compose build
+      - name: Build all Docker Images with Compose
+        run: |
+          docker compose build
 
       - name: Save Docker Images to tar
         run: |
-          docker save tontooai-chat -o chat.tar
-          docker save tontooai-websearch -o websearch.tar
-          docker save tontooai-codeinterpreter -o codeinterpreter.tar
-          docker save tontooai-deepsearch -o deepsearch.tar
-          docker save tontooai-all -o all-apps.tar  # Combined Image
-
-      - name: Get current date
-        id: date
-        run: echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          docker save -o chat_${DATE}.tar project_chat
+          docker save -o websearch_${DATE}.tar project_websearch
+          docker save -o codeinterpreter_${DATE}.tar project_codeinterpreter
+          docker save -o deepsearch_${DATE}.tar project_deepsearch
+          docker save -o all_apps_${DATE}.tar project_all
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ env.DATE }}
+          tag: "docker-build-${{ env.DATE }}"
           name: "Docker Build ${{ env.DATE }}"
           files: |
-            chat.tar
-            websearch.tar
-            codeinterpreter.tar
-            deepsearch.tar
-            all-apps.tar
+            chat_${{ env.DATE }}.tar
+            websearch_${{ env.DATE }}.tar
+            codeinterpreter_${{ env.DATE }}.tar
+            deepsearch_${{ env.DATE }}.tar
+            all_apps_${{ env.DATE }}.tar
             installer.sh
             installer.bat
