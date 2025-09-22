@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-GITHUB_REPO="arlomu/Tontoo"
+GITHUB_REPO="arlomu/TontooAI"
 FILES="deepsearch.tar chat.tar websearch.tar codeinterpreter.tar"
 
 for FILE_NAME in $FILES; do
