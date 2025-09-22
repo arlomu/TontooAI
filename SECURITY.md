@@ -5,7 +5,7 @@ We take security seriously. Please follow these instructions to report and handl
 ## Reporting a Vulnerability
 If you discover a security issue, please **use our private GitHub Security Issue template**:
 
-[Report a Security Vulnerability](https://github.com/YOUR_USERNAME/YOUR_REPO/issues/new?template=security.yml)
+[Report a Security Vulnerability](https://github.com/arlomu/TontooAI/issues/new?template=security.yml)
 
 **Please do not post public details before the issue is fixed.**
 
