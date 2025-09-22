@@ -49,29 +49,22 @@ All work with evry Model
 
 ### Requirements
 
-- Node.js >= 18
-- npm ## Evry Needed Software are in ![Setup.sh](setup.sh) Installing
+- Docker
 - Ollama
-- OpenSSL
 
-### Clone the Repository
+### Run the Installer
 
-```bash
-git clone https://github.com/arlomu/TontooAI.git
+```Linux
+curl -sL https://raw.githubusercontent.com/arlomu/TontooAI/main/installer.sh | sh
 ````
 
-## Usage
+```Windows
+curl -sL https://raw.githubusercontent.com/arlomu/TontooAI/main/installer.bat -o installer.bat && cmd /c temp_installer.bat
+````
 
-### Development
+Open https://localhost in your browser
 
-```bash
-sudo bash setup.sh
-```
-
-Open your browser at [https://localhost](https://localhost)
-Or at Port 8080 As Seccond Server
-
-Login with Default Login: Passsword "admin123" Username "admin"
+login in with User "admin" Password "admin123" 
 
 ---
 
