@@ -21,7 +21,6 @@ for FILE_NAME in $FILES; do
     docker load -i "$FILE_NAME"
 done
 
-# Letztes Image starten
 IMAGE_NAME=$(docker images --format "{{.Repository}}:{{.Tag}}" | head -n 1)
 echo "Starting container $IMAGE_NAME ..."
 docker run --rm -it "$IMAGE_NAME"
