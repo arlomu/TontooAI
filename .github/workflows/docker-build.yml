@@ -26,7 +26,6 @@ jobs:
           docker save -o websearch_${DATE}.tar project_websearch
           docker save -o codeinterpreter_${DATE}.tar project_codeinterpreter
           docker save -o deepsearch_${DATE}.tar project_deepsearch
-          docker save -o all_apps_${DATE}.tar project_all
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
@@ -38,6 +37,5 @@ jobs:
             websearch_${{ env.DATE }}.tar
             codeinterpreter_${{ env.DATE }}.tar
             deepsearch_${{ env.DATE }}.tar
-            all_apps_${{ env.DATE }}.tar
             installer.sh
             installer.bat
