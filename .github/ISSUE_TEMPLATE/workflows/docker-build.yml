@@ -1,0 +1,60 @@
+name: Build Docker Images and Release
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'new-docker')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Build individual Docker Images
+        run: |
+          docker build -t chat ./Chat
+          docker build -t websearch ./Web-search
+          docker build -t codeinterpreter ./Code-Interpreter
+          docker build -t deepsearch ./Deep-Search
+      - name: Build combined Docker Image
+        run: |
+          mkdir combined
+          cp -r Chat Web-Search Code-Interpreter Deep-Search combined/
+          cat << 'EOF' > combined/Dockerfile
+          FROM node:22
+          WORKDIR /usr/src/app
+          COPY Chat ./Chat
+          COPY Web-Search ./Web-Search
+          COPY Code-Interpreter ./Code-Interpreter
+          COPY Deep-Search ./Deep-Search
+          WORKDIR /usr/src/app/Chat
+          RUN npm install
+          WORKDIR /usr/src/app/Web-Search
+          RUN npm install
+          WORKDIR /usr/src/app/Code-Interpreter
+          RUN npm install
+          WORKDIR /usr/src/app/Deep-Search
+          RUN npm install
+          WORKDIR /usr/src/app
+          CMD ["echo", "All apps installed"]
+          EOF
+          docker build -t all-apps combined
+      - name: Save Docker Images to tar
+        run: |
+          docker save chat -o chat.tar
+          docker save websearch -o websearch.tar
+          docker save codeinterpreter -o codeinterpreter.tar
+          docker save deepsearch -o deepsearch.tar
+          docker save all-apps -o all-apps.tar
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "docker-build-${{ github.sha }}"
+          name: "Docker Build ${{ github.sha }}"
+          files: |
+            chat.tar
+            websearch.tar
+            codeinterpreter.tar
+            deepsearch.tar
+            all-apps.tar
+            installer.sh   # <-- installer.sh aus deinem Repo wird hochgeladen
