@@ -22,10 +22,12 @@ jobs:
 
       - name: Save Docker Images to tar
         run: |
-          docker save -o chat_${DATE}.tar project_chat
-          docker save -o websearch_${DATE}.tar project_websearch
-          docker save -o codeinterpreter_${DATE}.tar project_codeinterpreter
-          docker save -o deepsearch_${DATE}.tar project_deepsearch
+          docker save -o chat_${DATE}.tar tontooai-chat
+          docker save -o websearch_${DATE}.tar tontooai-websearch
+          docker save -o codeinterpreter_${DATE}.tar tontooai-codeinterpreter
+          docker save -o deepsearch_${DATE}.tar tontooai-deepsearch
+          docker save -o TontooAI_all_${DATE}.tar tontooai-all
+
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
@@ -37,6 +39,7 @@ jobs:
             websearch_${{ env.DATE }}.tar
             codeinterpreter_${{ env.DATE }}.tar
             deepsearch_${{ env.DATE }}.tar
+            TontooAI_all_${{ env.DATE }}.tar
             installer.sh
             installer.bat
             
