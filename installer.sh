@@ -7,9 +7,8 @@ FILES="deepsearch.tar chat.tar websearch.tar codeinterpreter.tar"
 for FILE_NAME in $FILES; do
     echo "Processing $FILE_NAME ..."
     DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" \
-      | grep "browser_download_url.*$FILE_NAME" \
-      | cut -d '"' -f 4)
-    
+      | jq -r ".assets[] | select(.name==\"$FILE_NAME\") | .browser_download_url")
+
     if [ -z "$DOWNLOAD_URL" ]; then
         echo "Error: Download URL for $FILE_NAME not found!"
         exit 1
@@ -17,6 +16,7 @@ for FILE_NAME in $FILES; do
 
     echo "Downloading $FILE_NAME ..."
     curl -L -o "$FILE_NAME" "$DOWNLOAD_URL"
+
     echo "Loading Docker image from $FILE_NAME ..."
     docker load -i "$FILE_NAME"
 done
