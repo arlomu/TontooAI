@@ -39,3 +39,4 @@ jobs:
             deepsearch_${{ env.DATE }}.tar
             installer.sh
             installer.bat
+            
