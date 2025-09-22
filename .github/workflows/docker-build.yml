@@ -6,7 +6,7 @@ on:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'new-docker')
+    if: contains(github.event.head_commit.message, 'new-build')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -57,4 +57,4 @@ jobs:
             codeinterpreter.tar
             deepsearch.tar
             all-apps.tar
-            installer.sh   # <-- installer.sh aus deinem Repo wird hochgeladen
+            installer.sh
