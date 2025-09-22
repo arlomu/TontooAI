@@ -33,7 +33,7 @@ jobs:
         with:
           tag: "docker-build-${{ env.DATE }}"
           name: "Docker Build ${{ env.DATE }}"
-          files: |
+          artifacts: |
             chat_${{ env.DATE }}.tar
             websearch_${{ env.DATE }}.tar
             codeinterpreter_${{ env.DATE }}.tar
