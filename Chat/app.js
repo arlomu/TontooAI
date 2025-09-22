@@ -3,6 +3,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const fse = require('fs-extra');
 const yaml = require('js-yaml');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
@@ -10,6 +11,8 @@ const nodemailer = require('nodemailer');
 const os = require('os');
 const session = require('express-session');
 const { exec } = require('child_process');
+const multer = require('multer');
+const unzipper = require('unzipper');
 
 // --- Dateipfade ---
 const DATA_DIR = path.join(__dirname, 'data');
@@ -76,11 +79,27 @@ const timeString = now.toLocaleString('de-DE', {
     timeZone: 'Europe/Berlin'
 });
 
-// NEU: Funktion zum Laden der Integrationen
+// Multer configuration for handling file uploads
+const storage = multer.memoryStorage(); // Use memory storage for temporary files
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024, // Limit file size to 5MB (adjust as needed)
+    },
+    fileFilter: (req, file, cb) => {
+        // Allow only ZIP files
+        if (file.mimetype === 'application/zip' || file.mimetype === 'application/x-zip-compressed') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only ZIP files are allowed'), false);
+        }
+    }
+});
+
 const loadIntegrations = () => {
     loadedIntegrations = [];
     if (!fs.existsSync(INTEGRATIONS_DIR)) {
-        fs.mkdirSync(INTEGRATIONS_DIR, { recursive: true });
+        fse.mkdirSync(INTEGRATIONS_DIR, { recursive: true }); // Use fse.mkdirSync
         console.log(`Integrationsverzeichnis ${INTEGRATIONS_DIR} erstellt.`);
         return;
     }
@@ -94,7 +113,8 @@ const loadIntegrations = () => {
         if (fs.existsSync(infoPath)) {
             try {
                 const info = loadData(infoPath);
-                if (info && info.name && info.systemprompt) {
+                // NEU: Überprüfen, ob 'id' in info.yml vorhanden ist
+                if (info && info.id && info.name && info.systemprompt) {
                     const apiCalls = [];
                     for (let i = 1; i <= 5; i++) {
                         const apiCallKey = `api-call${i}`;
@@ -133,16 +153,19 @@ const loadIntegrations = () => {
                     }
 
                     loadedIntegrations.push({
-                        id: folderName,
+                        id: info.id, // Verwende die ID aus info.yml
                         name: info.name,
                         description: info.description,
                         icon: info.icon || 'default_icon.png',
                         systemprompt: info.systemprompt,
+                        license: info.license || 'N/A', // NEU
+                        author: info.author || 'Unknown', // NEU
+                        version: info.version || '1.0.0', // NEU
                         apiCalls: apiCalls
                     });
                     console.log(`Integration "${info.name}" geladen.`);
                 } else {
-                    console.warn(`info.yml in ${folderName} ist unvollständig (Name oder Systemprompt fehlt).`);
+                    console.warn(`info.yml in ${folderName} ist unvollständig (ID, Name oder Systemprompt fehlt).`);
                 }
             } catch (error) {
                 console.error(`Fehler beim Laden der info.yml in ${folderName}:`, error.message);
@@ -1037,6 +1060,106 @@ Nutzer-Eingabe: ${message} hallte dich an 3 Begriffe! nicht mehr!`;
         }
     }
 });
+
+// Füge diese neuen Admin-API-Endpunkte unter den anderen Admin-Endpunkten hinzu
+// Admin: Alle Integrationen abrufen (mit allen Details für Admin-Panel)
+app.get('/api/admin/integrations', authenticateUser, authorizeAdmin, (req, res) => {
+    res.json(loadedIntegrations);
+});
+
+// Admin: Integration hochladen und installieren
+app.post('/api/admin/integrations/upload', authenticateUser, authorizeAdmin, upload.single('integrationZip'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'No file uploaded.' });
+    }
+
+    const tempFilePath = req.file.path;
+    const uploadDir = path.join(INTEGRATIONS_DIR, `temp_extraction_${Date.now()}`); // Unique temp dir for extraction
+
+    try {
+        await fse.mkdir(uploadDir, { recursive: true });
+
+        // Extract the zip file
+        await fs.createReadStream(tempFilePath)
+            .pipe(unzipper.Extract({ path: uploadDir }))
+            .promise();
+
+        // Find the actual integration folder inside the extracted content
+        // This handles cases where the zip contains a single root folder or info.yml directly
+        let extractedFolderName = null;
+        const extractedContents = await fse.readdir(uploadDir);
+        
+        if (extractedContents.length === 1 && (await fse.stat(path.join(uploadDir, extractedContents[0]))).isDirectory()) {
+            extractedFolderName = extractedContents[0];
+        } else if (extractedContents.includes('info.yml')) { 
+            extractedFolderName = '.'; // info.yml is directly in the root of the zip
+        }
+
+        if (!extractedFolderName) {
+            await fse.remove(uploadDir);
+            return res.status(400).json({ message: 'Invalid integration ZIP file: No valid integration folder found or info.yml missing.' });
+        }
+
+        const sourcePath = extractedFolderName === '.' ? uploadDir : path.join(uploadDir, extractedFolderName);
+        const infoPath = path.join(sourcePath, 'info.yml');
+
+        if (!fs.existsSync(infoPath)) {
+            await fse.remove(uploadDir);
+            return res.status(400).json({ message: 'Invalid integration ZIP file: info.yml not found in the root of the extracted folder or its single subfolder.' });
+        }
+
+        const info = yaml.load(fs.readFileSync(infoPath, 'utf8'));
+        if (!info || !info.id) { // Ensure the info.yml has an 'id' field for the integration
+            await fse.remove(uploadDir);
+            return res.status(400).json({ message: 'Invalid info.yml: Missing "id" field. Please add a unique ID to your info.yml.' });
+        }
+
+        const integrationId = info.id; // Use the ID from info.yml as the final folder name
+        const finalIntegrationPath = path.join(INTEGRATIONS_DIR, integrationId);
+
+        if (fs.existsSync(finalIntegrationPath)) {
+            await fse.remove(uploadDir); // Clean up temp extraction
+            return res.status(409).json({ message: `An integration with ID '${integrationId}' already exists. Please delete the old one first if you wish to update.` });
+        }
+
+        await fse.move(sourcePath, finalIntegrationPath); // Move the actual integration content
+        
+        loadIntegrations(); // Reload all integrations
+        res.status(200).json({ message: 'Integration uploaded and installed successfully.', integrationId: integrationId });
+
+    } catch (error) {
+        console.error('Error uploading or installing integration:', error);
+        res.status(500).json({ message: error.message || 'Error uploading or installing integration.' });
+    } finally {
+        // Clean up temporary files/directories
+        if (fs.existsSync(tempFilePath)) {
+            await fse.remove(tempFilePath);
+        }
+        if (fs.existsSync(uploadDir)) {
+            await fse.remove(uploadDir);
+        }
+    }
+});
+
+// Admin: Integration löschen
+app.delete('/api/admin/integrations/:id', authenticateUser, authorizeAdmin, async (req, res) => {
+    const integrationId = req.params.id;
+    const integrationPath = path.join(INTEGRATIONS_DIR, integrationId);
+
+    if (!fs.existsSync(integrationPath)) {
+        return res.status(404).json({ message: 'Integration not found.' });
+    }
+
+    try {
+        await fse.remove(integrationPath);
+        loadIntegrations(); // Reload all integrations
+        res.status(200).json({ message: 'Integration deleted successfully.' });
+    } catch (error) {
+        console.error(`Error deleting integration ${integrationId}:`, error);
+        res.status(500).json({ message: 'Error deleting integration.' });
+    }
+});
+
 
 // NEU: Endpunkt zum Abrufen der Integrationen
 app.get('/api/integrations', authenticateUser, (req, res) => {

@@ -24,6 +24,9 @@
                 <div class="admin-nav-item" data-section="models">
                     <i class="fas fa-brain"></i> <span id="modelsNav"></span>
                 </div>
+                <div class="admin-nav-item" data-section="integrations"> <!-- NEU: Integrations-Nav-Item -->
+                    <i class="fas fa-puzzle-piece"></i> <span id="integrationsNav"></span>
+                </div>
                 <div class="admin-nav-item" data-section="config">
                     <i class="fas fa-cog"></i> <span id="configNav"></span>
                 </div>
@@ -97,6 +100,33 @@
                             </tr>
                         </thead>
                         <tbody id="modelTableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- NEU: Integrations Section -->
+                <div id="integrations-section" class="admin-section">
+                    <div class="section-header">
+                        <h2 id="integrationsTitle"></h2>
+                        <form id="integrationUploadForm" enctype="multipart/form-data" style="display: flex; gap: 10px; align-items: center;">
+                            <input type="file" id="integrationFile" name="integrationZip" accept=".zip" required style="display: none;">
+                            <label for="integrationFile" class="button"><i class="fas fa-upload"></i> <span id="uploadIntegrationBtnText"></span></label>
+                            <button type="submit" style="display: none;"></button> <!-- Hidden submit button -->
+                            <span id="selectedFileName" style="color: var(--sekundaer-text-farbe); font-size: 0.9em;"></span>
+                        </form>
+                    </div>
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th id="integrationNameTh"></th>
+                                <th id="integrationDescriptionTh"></th>
+                                <th id="integrationAuthorTh"></th>
+                                <th id="integrationVersionTh"></th>
+                                <th id="integrationLicenseTh"></th>
+                                <th id="actionsIntegrationTh"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="integrationTableBody">
                         </tbody>
                     </table>
                 </div>
@@ -333,6 +363,24 @@
             }
         }
 
+        // NEU: Global function for deleting integration
+        window.deleteIntegration = async function(integrationId) {
+            if (!confirm(lang.confirm_delete_integration.replace('%id', integrationId))) return;
+            try {
+                const response = await authenticatedFetch(`/api/admin/integrations/${integrationId}`, { method: 'DELETE' });
+                if (response.ok) {
+                    showPopup(lang.success_delete_integration, 'success');
+                    loadIntegrationsAdmin();
+                } else {
+                    const data = await response.json();
+                    showPopup(data.message || lang.error_delete_integration, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting integration:', error);
+                showPopup(lang.error_unexpected, 'error');
+            }
+        }
+
         // Utility functions
         async function authenticatedFetch(url, options = {}) {
             const token = localStorage.getItem('authToken');
@@ -341,10 +389,16 @@
                 return;
             }
             const headers = {
-                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
                 ...options.headers
             };
+            // Only set Content-Type for JSON bodies, not for FormData
+            if (options.body instanceof FormData) {
+                delete headers['Content-Type']; // Browser sets this automatically for FormData
+            } else if (options.body && typeof options.body === 'object') {
+                headers['Content-Type'] = 'application/json';
+                options.body = JSON.stringify(options.body);
+            }
             const response = await fetch(url, { ...options, headers });
             if (response.status === 401 || response.status === 403) {
                 localStorage.removeItem('authToken');
@@ -439,6 +493,7 @@
                 document.getElementById('dashboardNav').textContent = lang.dashboard;
                 document.getElementById('usersNav').textContent = lang.users;
                 document.getElementById('modelsNav').textContent = lang.models;
+                document.getElementById('integrationsNav').textContent = lang.integrations; // NEU
                 document.getElementById('configNav').textContent = lang.config;
                 document.getElementById('ollamaNav').textContent = lang.ollama;
 
@@ -467,6 +522,17 @@
                 document.getElementById('modelIdTh').textContent = lang.model_id;
                 document.getElementById('displayNameTh').textContent = lang.display_name;
                 document.getElementById('actionsModelTh').textContent = lang.actions;
+
+                // NEU: Integrations-Texte
+                document.getElementById('integrationsTitle').textContent = lang.integrations;
+                document.getElementById('uploadIntegrationBtnText').textContent = lang.upload_integration_btn_text;
+                document.getElementById('integrationNameTh').textContent = lang.integration_name;
+                document.getElementById('integrationDescriptionTh').textContent = lang.integration_description;
+                document.getElementById('integrationAuthorTh').textContent = lang.integration_author;
+                document.getElementById('integrationVersionTh').textContent = lang.integration_version;
+                document.getElementById('integrationLicenseTh').textContent = lang.integration_license;
+                document.getElementById('actionsIntegrationTh').textContent = lang.actions_integration;
+
 
                 document.getElementById('configTitle').textContent = lang.config;
                 document.getElementById('saveConfigBtnText').textContent = lang.save;
@@ -584,6 +650,7 @@
                             case 'dashboard': loadDashboardData(); break;
                             case 'users': loadUsers(); break;
                             case 'models': loadModels(); break;
+                            case 'integrations': loadIntegrationsAdmin(); break; // NEU
                             case 'config': loadConfig(); break;
                             case 'ollama': loadOllamaStatus(); break;
                         }
@@ -610,6 +677,53 @@
                 openModal('ollamaModal');
             });
             
+            // NEU: Integrations-Upload Form Handling
+            const integrationFile = document.getElementById('integrationFile');
+            const integrationUploadForm = document.getElementById('integrationUploadForm');
+            const selectedFileNameSpan = document.getElementById('selectedFileName');
+
+            integrationFile.addEventListener('change', () => {
+                if (integrationFile.files.length > 0) {
+                    selectedFileNameSpan.textContent = integrationFile.files[0].name;
+                    integrationUploadForm.dispatchEvent(new Event('submit')); // Auto-submit on file select
+                } else {
+                    selectedFileNameSpan.textContent = '';
+                }
+            });
+
+            integrationUploadForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                if (integrationFile.files.length === 0) {
+                    showPopup(lang.integration_file_missing, 'error');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('integrationZip', integrationFile.files[0]);
+
+                try {
+                    showPopup(lang.upload_integration_progress, 'info'); // Add a new lang key for this
+                    const response = await authenticatedFetch('/api/admin/integrations/upload', {
+                        method: 'POST',
+                        body: formData // FormData is passed directly, authenticatedFetch handles Content-Type
+                    });
+
+                    const data = await response.json();
+                    if (response.ok) {
+                        showPopup(lang.success_upload_integration, 'success');
+                        loadIntegrationsAdmin(); // Reload the list after successful upload
+                        integrationFile.value = ''; // Clear file input
+                        selectedFileNameSpan.textContent = '';
+                    } else {
+                        showPopup(data.message || lang.error_upload_integration, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error uploading integration:', error);
+                    showPopup(lang.error_unexpected, 'error');
+                }
+            });
+
+
             const userInfoFooter = document.getElementById('userInfoFooter');
             const userInfoPopup = document.getElementById('userInfoPopup');
             userInfoFooter.addEventListener('click', (event) => {
@@ -693,6 +807,33 @@
                 }
             }
 
+            // NEU: Funktion zum Laden und Anzeigen von Integrationen
+            async function loadIntegrationsAdmin() {
+                try {
+                    const response = await authenticatedFetch('/api/admin/integrations');
+                    if (!response.ok) throw new Error(lang.error_load_integrations); // New lang key
+                    const integrations = await response.json();
+                    const tableBody = document.getElementById('integrationTableBody');
+                    tableBody.innerHTML = '';
+                    integrations.forEach(integration => {
+                        const row = tableBody.insertRow();
+                        row.innerHTML = `
+                            <td>${integration.name}</td>
+                            <td>${integration.description}</td>
+                            <td>${integration.author}</td>
+                            <td>${integration.version}</td>
+                            <td>${integration.license}</td>
+                            <td class="actions">
+                                <button class="danger" onclick="deleteIntegration('${integration.id}')"><i class="fas fa-trash"></i></button>
+                            </td>
+                        `;
+                    });
+                } catch (error) {
+                    console.error('Error loading integrations:', error);
+                    showPopup(lang.error_load_integrations, 'error'); // New lang key
+                }
+            }
+
             async function loadConfig() {
                 try {
                     const response = await authenticatedFetch('/api/admin/config');
@@ -754,7 +895,7 @@
 
                     const response = await authenticatedFetch('/api/admin/config', {
                         method: 'PUT',
-                        body: JSON.stringify({ updatedConfig })
+                        body: updatedConfig // authenticatedFetch will stringify this
                     });
 
                     if (response.ok) {
@@ -782,12 +923,12 @@
                         const host1Response = await fetch(`http://${host1}:${config.ollama.port}/api/version`);
                         if (host1Response.ok) {
                             const version = await host1Response.json();
-                            document.getElementById('host1Status').innerHTML = `<span style="color: var(--erfolgs-farbe);">${lang.online} (v${version.version || 'unknown'})</span>`;
+                            document.getElementById('host1Status').innerHTML = `<span style="color: var(--erfolgs-farbe);">Online (v${version.version || 'unknown'})</span>`;
                         } else {
-                            document.getElementById('host1Status').innerHTML = `<span style="color: var(--fehler-farbe);">${lang.offline}</span>`;
+                            document.getElementById('host1Status').innerHTML = `<span style="color: var(--fehler-farbe);">Offline</span>`;
                         }
                     } catch (error) {
-                        document.getElementById('host1Status').innerHTML = `<span style="color: var(--fehler-farbe);">${lang.offline}</span>`;
+                        document.getElementById('host1Status').innerHTML = `<span style="color: var(--fehler-farbe);">Offline</span>`;
                     }
                     
                     if (config.ollama.host2 !== 'none') {
@@ -796,15 +937,15 @@
                             const host2Response = await fetch(`http://${host2}:${config.ollama.port}/api/version`);
                             if (host2Response.ok) {
                                 const version = await host2Response.json();
-                                document.getElementById('host2Status').innerHTML = `<span style="color: var(--erfolgs-farbe);">${lang.online} (v${version.version || 'unknown'})</span>`;
+                                document.getElementById('host2Status').innerHTML = `<span style="color: var(--erfolgs-farbe);">Online (v${version.version || 'unknown'})</span>`;
                             } else {
-                                document.getElementById('host2Status').innerHTML = `<span style="color: var(--fehler-farbe);">${lang.offline}</span>`;
+                                document.getElementById('host2Status').innerHTML = `<span style="color: var(--fehler-farbe);">Offline</span>`;
                             }
                         } catch (error) {
-                            document.getElementById('host2Status').innerHTML = `<span style="color: var(--fehler-farbe);">${lang.offline}</span>`;
+                            document.getElementById('host2Status').innerHTML = `<span style="color: var(--fehler-farbe);">Offline</span>`;
                         }
                     } else {
-                        document.getElementById('host2Status').innerHTML = `<span style="color: var(--text-farbe-gedaempft);">${lang.disabled}</span>`;
+                        document.getElementById('host2Status').innerHTML = `<span style="color: var(--sekundaer-text-farbe);">Deaktiviert</span>`;
                     }
                 } catch (error) {
                     console.error('Error loading Ollama status:', error);
@@ -832,7 +973,7 @@
                 try {
                     const url = isEdit ? `/api/admin/users/${userId}` : '/api/admin/users';
                     const method = isEdit ? 'PUT' : 'POST';
-                    const response = await authenticatedFetch(url, { method, body: JSON.stringify(userData) });
+                    const response = await authenticatedFetch(url, { method, body: userData });
                     const data = await response.json();
                     if (response.ok) {
                         showPopup(isEdit ? lang.success_update_user : lang.success_create_user, 'success');
@@ -854,7 +995,7 @@
                 try {
                     const response = await authenticatedFetch('/api/admin/models', {
                         method: 'POST',
-                        body: JSON.stringify({ ollamaModelId, displayName })
+                        body: { ollamaModelId, displayName }
                     });
                     const data = await response.json();
                     if (response.ok) {
@@ -880,7 +1021,7 @@
                     
                     const response = await authenticatedFetch('/api/admin/models/manage', {
                         method: 'POST',
-                        body: JSON.stringify({ action, modelId })
+                        body: { action, modelId }
                     });
                     
                     const data = await response.json();

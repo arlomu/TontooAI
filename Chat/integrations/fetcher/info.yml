@@ -1,4 +1,5 @@
-name: Fetcher 
+id: fetcher-integration
+name: Fetcher
 description: Get Data from a URL
 author: "arlomu"
 tags: [fetcher, fetch, content, network, request]

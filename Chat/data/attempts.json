@@ -1,0 +1,9 @@
+{
+  "loginAttempts": {
+    "127.0.0.1": {
+      "count": 0,
+      "lastAttempt": 0,
+      "lockedUntil": 0
+    }
+  }
+}

@@ -9,6 +9,7 @@ Fetcher
 **How to make your own**:
 
 ```Copy ME
+id: deutsche-bahn-integration
 name: Deutsche Bahn # The name of the integration; it will also be displayed in the integrations menu
 description: Trains & timetables in Germany # A short description of the integration; only relevant here, not shown anywhere else
 author: "arlomu, Claude" # The authors; also not shown anywhere
@@ -139,7 +140,7 @@ api-call3-output: |
   ]
 
 # Max 5 API calls!
-```
+````
 
 **Steps**
 

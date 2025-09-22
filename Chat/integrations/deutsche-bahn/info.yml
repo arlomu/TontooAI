@@ -1,6 +1,7 @@
+id: deutsche-bahn-integration
 name: Deutsche Bahn # Der  Name der Integration er wird auch dann im Integrationenmenü angezeigt
 description: Züge & Fahrpläne in Deutschland # Eine kurze Beschreibung der Integration nur für hier wichtig steht nirgends wo
-author: "arlomu, Claude" # Die Authoren stehen auch nirgendswo
+author: "arlomu" # Die Authoren stehen auch nirgendswo
 tags: [transport, germany, trains, public-transport] # Die Tags helfen die Integration zu kategorisieren aber sind auch in keinem GUI
 license: MIT # Auch nicht im GUI
 repository: https://github.com/arlomu/Bahn-API-Integration # Auch nicht im GUI

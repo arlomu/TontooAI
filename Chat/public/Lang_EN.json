@@ -135,5 +135,21 @@
   "error_save_user": "Error saving user.",
   "success_add_model": "Model added successfully.",
   "error_add_model": "Error adding model.",
-  "error_manage_model": "Error managing model."
+  "error_manage_model": "Error managing model.",
+  "integrations": "Integrations",
+  "upload_integration_btn_text": "Upload Integration (.zip)",
+  "integration_name": "Name",
+  "integration_description": "Description",
+  "integration_author": "Author",
+  "integration_version": "Version",
+  "integration_license": "License",
+  "actions_integration": "Actions",
+  "integration_file_missing": "Please select an integration ZIP file.",
+  "upload_integration_progress": "Uploading and installing integration...",
+  "success_upload_integration": "Integration uploaded and installed successfully.",
+  "error_upload_integration": "Error uploading or installing integration.",
+  "error_load_integrations": "Error loading integrations.",
+  "confirm_delete_integration": "Are you sure you want to delete integration '%id%'? This cannot be undone.",
+  "success_delete_integration": "Integration deleted successfully.",
+  "error_delete_integration": "Error deleting integration."
 }
