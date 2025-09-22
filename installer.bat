@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: GitHub Repo und Dateien
-set "GITHUB_REPO=arlomu/Tontoo"
+set "GITHUB_REPO=arlomu/TontooAI"
 set "FILES=deepsearch.tar chat.tar websearch.tar codeinterpreter.tar"
 
 echo Fetching the latest release URLs from GitHub...
