@@ -1,19 +1,15 @@
 #!/bin/sh
 set -e
 
-# Repo anpassen
 GITHUB_REPO="arlomu/TontooAI"
 
-# Liste der Docker-Tar-Dateien
 FILES="deepsearch.tar chat.tar websearch.tar codeinterpreter.tar"
 
-# Prüfen, ob jq installiert ist
 if ! command -v jq >/dev/null 2>&1; then
     echo "Error: jq ist nicht installiert. Bitte zuerst installieren (sudo apt install jq)."
     exit 1
 fi
 
-# Alle Dateien herunterladen und Docker-Images laden
 for FILE_NAME in $FILES; do
     echo "Processing $FILE_NAME ..."
     
@@ -36,14 +32,43 @@ for FILE_NAME in $FILES; do
     docker load -i "$FILE_NAME"
 done
 
-# Erstes Image aus Docker-Images auswählen
 IMAGE_NAME=$(docker images --format "{{.Repository}}:{{.Tag}}" | head -n 1)
 echo "Starting container $IMAGE_NAME ..."
 docker run --rm -it "$IMAGE_NAME"
 
-# Heruntergeladene Dateien löschen
-for FILE_NAME in $FILES; do
-    rm -f "$FILE_NAME"
-done
+
+docker network create tontooai-net
+
+docker run -d \
+  --name tontooai-chat-container \
+  --network tontooai-net \
+  --add-host=host.docker.internal:host-gateway \
+  -p 8080:8080 \
+  -p 443:443 \
+  -p 80:80 \
+  tontooai-chat
+
+docker run -d \
+  --name tontooai-websearch-container \
+  --network tontooai-net \
+  --add-host=host.docker.internal:host-gateway \
+  tontooai-websearch
+
+docker run -d \
+  --name tontooai-codeinterpreter-container \
+  --network tontooai-net \
+  --add-host=host.docker.internal:host-gateway \
+  tontooai-codeinterpreter
+
+docker run -d \
+  --name tontooai-deepsearch-container \
+  --network tontooai-net \
+  --add-host=host.docker.internal:host-gateway \
+  tontooai-deepsearch
+
+rm codeinterpreter.tar
+rm chat.tar
+rm deepsearch.tar
+rm websearch.tar
 
 echo "Done!"

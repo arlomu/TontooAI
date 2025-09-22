@@ -179,7 +179,7 @@ const loadIntegrations = () => {
 const initializeData = () => {
     generalConfig = loadData(GENERAL_PATH, { "name": "Tontoo AI", "html-titel": "Tontoo AI | %name", "developer": "arlomu", "github": "https://github.com/arlomu" });
     config = loadData(CONFIG_PATH, {
-        "main-port": 80, "ollama": { "port": 11434, "host1": "localhost", "host2": "none" },
+        "main-port": 80, "ollama": { "port": 11434, "host1": "host.docker.internal", "host2": "none" },
         "ssl-port": 443, "2er-port": 8080, "host": "localhost",
         "trusted-domains": ["localhost", "127.0.0.1"],
         "sprache": "Deutsch",
@@ -807,7 +807,7 @@ app.post('/api/websearch', authenticateUser, async (req, res) => {
         abortController = new AbortController();
         userGenerationControllers.set(req.userId, abortController);
 
-        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaHost = config.ollama.host1 === 'host.docker.internal' ? 'host.docker.internal' : config.ollama.host1;
         const ollamaPort = config.ollama.port;
         const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
 
@@ -895,7 +895,7 @@ Nutzer-Eingabe: ${message} hallte dich an 3 Begriffe! nicht mehr!`;
         console.log('Final search terms sent to Websearch API:', searchTerms); // Debugging-Log
 
         // Schritt 2: Suchbegriffe an localhost:53564 senden
-        const websearchResponse = await fetch('http://localhost:53564', {
+        const websearchResponse = await fetch('http://tontooai-websearch-container:53564', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(searchTerms),
@@ -1248,7 +1248,7 @@ app.post('/api/integrate', authenticateUser, async (req, res) => {
         abortController = new AbortController();
         userGenerationControllers.set(req.userId, abortController);
 
-        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaHost = config.ollama.host1 === 'host.docker.internal' ? '127.0.0.1' : config.ollama.host1;
         const ollamaPort = config.ollama.port;
         const ollamaModel = model && models[model] ? model : Object.keys(models) || 'llama3';
 
@@ -1601,9 +1601,9 @@ app.post('/api/deepsearch', authenticateUser, async (req, res) => {
         abortController = new AbortController();
         userGenerationControllers.set(req.userId, abortController);
 
-        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaHost = config.ollama.host1 === 'host.docker.internal' ? 'host.docker.internal' : config.ollama.host1;
         const ollamaPort = config.ollama.port;
-        const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
+        const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'gemma3:1b';
 
         // Setze Response-Header für Streaming
         res.writeHead(200, {
@@ -1686,7 +1686,7 @@ Nutzer-Eingabe: ${message}`;
         }
 
         // Schritt 2: DeepSearch API aufrufen
-        const deepsearchResponse = await fetch('http://localhost:6456', {
+        const deepsearchResponse = await fetch('http://tontooai-deepsearch-container:6456', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(keywordTerms)
@@ -1969,7 +1969,7 @@ Benutzeranfrage: ${message}`;
             content: message
         });
 
-        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaHost = config.ollama.host1 === 'host.docker.internal' ? 'host.docker.internal' : config.ollama.host1;
         const ollamaPort = config.ollama.port;
 
         const aiResponse = await fetch(`http://${ollamaHost}:${ollamaPort}/api/chat`, {
@@ -2182,7 +2182,7 @@ Erkläre dem Benutzer das Ergebnis auf eine verständliche Art. Sei hilfreich un
 
 // Hilfsfunktion für Ollama API-Anfragen
 async function makeAIRequest(prompt, model, userId, stream = true) {
-    const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+    const ollamaHost = config.ollama.host1 === 'host.docker.internal' ? 'host.docker.internal' : config.ollama.host1;
     const ollamaPort = config.ollama.port;
     const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
 
@@ -2348,7 +2348,7 @@ app.post('/api/chat/send', authenticateUser, async (req, res) => {
         abortController = new AbortController();
         userGenerationControllers.set(req.userId, abortController);
 
-        const ollamaHost = config.ollama.host1 === 'localhost' ? '127.0.0.1' : config.ollama.host1;
+        const ollamaHost = config.ollama.host1 === 'host.docker.internal' ? 'host.docker.internal' : config.ollama.host1;
         const ollamaPort = config.ollama.port;
         const ollamaModel = model && models[model] ? model : Object.keys(models)[0] || 'llama3';
 

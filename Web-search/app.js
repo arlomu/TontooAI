@@ -3,14 +3,19 @@ const express = require("express");
 const axios = require("axios");
 const bodyParser = require("body-parser");
 const cheerio = require("cheerio");
-const { spawn } = require("child_process");
 
 const app = express();
 app.use(bodyParser.json());
 
 const PORT = 53564;
 
-// Funktion: DuckDuckGo Suche
+// === Ollama Netzwerk-Einstellungen ===
+const OLLAMA_HOST = "host.docker.internal"; // Hostname oder IP des Ollama-Servers
+const OLLAMA_PORT = 11434;       // Port der Ollama-API
+// Optional: falls API-Key notwendig
+// const OLLAMA_API_KEY = "dein_api_key";
+
+// === DuckDuckGo Suche ===
 async function searchDuckDuckGo(query) {
   const res = await axios.post(
     "https://html.duckduckgo.com/html/",
@@ -38,28 +43,36 @@ async function searchDuckDuckGo(query) {
   return results;
 }
 
-// Funktion: Anfrage an Ollama Model
-async function queryOllama(model, systemPrompt) {
-  return new Promise((resolve, reject) => {
-    let output = "";
-    const ollama = spawn("ollama", ["run", model], { stdio: ["pipe", "pipe", "inherit"] });
+// === Anfrage an Ollama über Netzwerk-API ===
+async function queryOllama(model, systemPrompt, timeoutMs = 60000) {
+  try {
+    const response = await axios.post(
+      `http://${OLLAMA_HOST}:${OLLAMA_PORT}/v1/completions`,
+      {
+        model: model,
+        prompt: systemPrompt,
+        max_tokens: 500,
+      },
+      {
+        timeout: timeoutMs,
+        headers: {
+          "Content-Type": "application/json",
+          // Optional: "Authorization": `Bearer ${OLLAMA_API_KEY}`
+        },
+      }
+    );
 
-    ollama.stdin.write(systemPrompt);
-    ollama.stdin.end();
-
-    ollama.stdout.on("data", (data) => {
-      output += data.toString();
-    });
-
-    ollama.on("close", () => {
-      resolve(output.trim());
-    });
-
-    ollama.on("error", (err) => reject(err));
-  });
+    if (response.data && response.data.completion) {
+      return response.data.completion.trim();
+    } else {
+      throw new Error("Ungültige Antwort von Ollama API");
+    }
+  } catch (err) {
+    throw new Error(`Ollama network error: ${err.message}`);
+  }
 }
 
-// Endpoint
+// === Endpoint ===
 app.post("/", async (req, res) => {
   try {
     const { suchworter, model } = req.body;
@@ -79,8 +92,8 @@ app.post("/", async (req, res) => {
 
     const urls = allResults.map(r => r.url);
 
- // Prompt bauen
-const systemPrompt = `
+    // Prompt bauen
+    const systemPrompt = `
 Fasse die folgenden Begriffe in einem kurzen Text zusammen:
 - ${suchworter.join("\n- ")}
 
@@ -94,7 +107,7 @@ Antwort NUR im folgenden JSON-Format (ohne Markdown, ohne extra Text, ohne Codeb
 }
 `;
 
-    // Anfrage an Ollama
+    // Anfrage an Ollama über Netzwerk
     const response = await queryOllama(model, systemPrompt);
 
     // Versuch JSON zu parsen

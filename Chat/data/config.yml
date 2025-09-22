@@ -1,7 +1,7 @@
 main-port: 80
 ollama:
   port: 11434
-  host1: 127.0.0.1
+  host1: host.docker.internal
   host2: none
 ssl-port: 443
 2er-port: 8080
