@@ -1,14 +1,14 @@
 {
-  "name": "ollama-web-chat",
+  "name": "TontooAI",
   "version": "1.0.0",
-  "description": "A comprehensive Ollama Web Chat application.",
+  "description": "a NodeJS app",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
   },
   "keywords": [],
   "author": "arlomu",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",

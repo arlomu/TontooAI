@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+
+  chat:
+    build: ./Chat
+    volumes:
+      - ./Chat:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    command: ["npm", "start"]
+
+  websearch:
+    build: ./Web-search
+    volumes:
+      - ./Websearch:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "53564:53564"
+    command: ["npm", "start"]
+
+  codeinterpreter:
+    build: ./Code-interpreter
+    volumes:
+      - ./Codeinterpreter:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "2463:2463"
+    command: ["npm", "start"]
+
+  deepsearch:
+    build: ./Deep-search
+    volumes:
+      - ./Deepsearch:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "6456:6456"
+    command: ["npm", "start"]
